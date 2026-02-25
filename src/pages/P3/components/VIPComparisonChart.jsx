@@ -12,7 +12,7 @@ export default function VIPComparisonChart() {
   return (
     <div className="h-full flex flex-col">
       {/* 图例 */}
-      <div className="flex items-center justify-center gap-6 mb-3">
+      <div className="flex items-center justify-center gap-6 mb-2">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded bg-gradient-to-r from-yellow-400 to-yellow-600" />
           <span className="text-yellow-400 text-xs font-medium">VIP用户 (5G-A)</span>
@@ -24,7 +24,7 @@ export default function VIPComparisonChart() {
       </div>
 
       {/* 对比项 */}
-      <div className="flex-1 space-y-2 overflow-y-auto scrollbar-thin">
+      <div className="flex-1 flex flex-col justify-between">
         {categories.map((item, index) => {
           const vipPercent = item.reverse 
             ? (item.norm / item.vip) * 100  // 时延反向计算
@@ -42,27 +42,27 @@ export default function VIPComparisonChart() {
               className="relative"
             >
               {/* 标签 */}
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-yellow-400 text-xs font-bold font-orbitron">
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="text-yellow-400 text-[10px] font-bold font-orbitron">
                   {item.vip} {item.unit}
                 </span>
-                <div className="flex items-center gap-1 px-2 py-0.5 bg-white/10 rounded-full">
-                  <span className="text-base">{item.icon}</span>
-                  <span className="text-white/80 text-xs">{item.name}</span>
+                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-white/10 rounded-full">
+                  <span className="text-sm">{item.icon}</span>
+                  <span className="text-white/80 text-[10px]">{item.name}</span>
                 </div>
-                <span className="text-cyan-400 text-xs font-bold font-orbitron">
+                <span className="text-cyan-400 text-[10px] font-bold font-orbitron">
                   {item.norm} {item.unit}
                 </span>
               </div>
 
               {/* 胶囊条 */}
-              <div className="h-6 bg-white/5 rounded-full relative overflow-hidden flex items-center">
+              <div className="h-5 bg-white/5 rounded-full relative overflow-hidden flex items-center">
                 {/* VIP 值 (左侧金色) */}
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${vipPercent * 0.45}%` }}
                   transition={{ duration: 0.8, delay: 0.2 + index * 0.1 }}
-                  className="h-4 rounded-full bg-gradient-to-r from-yellow-500 to-yellow-400 ml-1"
+                  className="h-2 rounded-full bg-gradient-to-r from-yellow-500 to-yellow-400 ml-1"
                   style={{ maxWidth: '45%' }}
                 />
                 
@@ -74,7 +74,7 @@ export default function VIPComparisonChart() {
                   initial={{ width: 0 }}
                   animate={{ width: `${normPercent * 0.45}%` }}
                   transition={{ duration: 0.8, delay: 0.3 + index * 0.1 }}
-                  className="h-4 rounded-full bg-gradient-to-l from-cyan-500 to-cyan-400 mr-1 ml-auto"
+                  className="h-2 rounded-full bg-gradient-to-l from-cyan-500 to-cyan-400 mr-1 ml-auto"
                   style={{ maxWidth: '45%' }}
                 />
               </div>
@@ -84,7 +84,7 @@ export default function VIPComparisonChart() {
       </div>
 
       {/* 底部高亮 */}
-      <div className="mt-3 p-2 rounded-lg bg-gradient-to-r from-yellow-500/10 to-cyan-500/10 border border-yellow-500/20">
+      <div className="mt-4 p-2 rounded-lg bg-gradient-to-r from-yellow-500/10 to-cyan-500/10 border border-yellow-500/20">
         <div className="flex items-center justify-center gap-4 text-xs">
           <div className="text-center">
             <span className="text-yellow-400 font-bold font-orbitron">10倍</span>

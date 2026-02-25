@@ -187,13 +187,13 @@ export default function EvaluationView() {
               
               <div className="mb-2">
                 <div className="text-white/50 text-[9px] mb-0.5">用户分享活跃度</div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-xl font-bold text-cyan-400 font-orbitron">Peak: 4.2</span>
-                  <span className="text-cyan-400 text-xs">Gbps</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-cyan-400 font-orbitron">Peak: 4.2</span>
+                  <span className="text-sm text-cyan-500">Gbps</span>
                 </div>
               </div>
               
-              <div className="h-[80px]">
+              <div className="h-40 w-full">
                 <UplinkTrendChart />
               </div>
               

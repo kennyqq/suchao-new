@@ -19,7 +19,7 @@ const UPLINK_DATA = [
 
 export default function UplinkTrendChart() {
   const option = {
-    grid: { top: 40, right: 10, bottom: 30, left: 50 },
+    grid: { top: 40, bottom: 25, left: 30, right: 15, containLabel: true },
     xAxis: {
       type: 'category',
       boundaryGap: false,
