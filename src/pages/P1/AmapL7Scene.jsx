@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Loader2, MapPin, X, Activity, Zap, Cpu } from 'lucide-react';
+import { Loader2, MapPin, X, Activity, Zap, Cpu, Users, Radio } from 'lucide-react';
 import { Scene, GaodeMap, PointLayer, LineLayer, PolygonLayer } from '@antv/l7';
 import { fetchFlowData, fetchZoneData } from '../../api/dashboard.js';
 
 const AMAP_KEY = import.meta.env.VITE_AMAP_KEY || '';
 const AMAP_SECURITY_CODE = import.meta.env.VITE_AMAP_SECURITY_CODE || '';
-const CENTER_COORDINATES = [118.7265, 32.0087];
+
+// ========== 调整后的摄像机视角 ==========
+const CAMERA_CONFIG = {
+  center: [118.728, 32.005], // 同时包容奥体、华彩中心、地铁站
+  zoom: 14.5,
+  pitch: 45,
+};
 
 // 默认空 GeoJSON
 const EMPTY_GEOJSON = { type: 'FeatureCollection', features: [] };
@@ -18,87 +24,211 @@ const CUSTOM_LANDMARKS = [
   { name: '华彩中心(第二现场)', lng: 118.7400, lat: 32.0120, type: 'secondary' },
 ];
 
-// ========== 应急通信车位置 ==========
+// ========== 修正后的应急通信车位置 (真实停车场坐标) ==========
 const EMERGENCY_VEHICLES = [
-  { id: 'EV-001', name: '应急通信车-东', lng: 118.7350, lat: 32.0030, status: 'active' },
-  { id: 'EV-002', name: '应急通信车-西', lng: 118.7180, lat: 32.0100, status: 'active' },
+  { id: 'EV-001', name: '应急通信车-东', lng: 118.7305, lat: 32.0080, status: 'active' },
+  { id: 'EV-002', name: '应急通信车-西', lng: 118.7215, lat: 32.0080, status: 'active' },
 ];
 
-// ========== Mock 48个基站坐标 (严格约束在奥体周边 ±0.005) ==========
+// ========== 精简为 8 个基站 (真实宏站间距) ==========
 function generateBaseStations() {
-  const stations = [];
-  const centerLng = 118.7265;
-  const centerLat = 32.0087;
-  
-  for (let i = 0; i < 48; i++) {
-    // 严格约束偏移量在 ±0.005 经纬度内
-    const lng = centerLng + (Math.random() - 0.5) * 0.01;
-    const lat = centerLat + (Math.random() - 0.5) * 0.01;
-    
-    stations.push({
-      id: `BS-${String(i + 1).padStart(3, '0')}`,
-      name: `奥体基站-${i + 1}`,
-      lng,
-      lat,
-      bbuLoad: Math.floor(Math.random() * 40) + 30,
-      aauStatus: Math.random() > 0.1 ? 'normal' : 'warning',
-      hasSmartBoard: i % 8 === 0,
-      type: i < 12 ? 'main' : 'micro',
-    });
-  }
+  const stations = [
+    { id: 'BS-001', name: '奥体主站-北', lng: 118.7265, lat: 32.0130, bbuLoad: 65, aauStatus: 'normal', hasSmartBoard: true, users: 2847, prb: 72 },
+    { id: 'BS-002', name: '奥体主站-南', lng: 118.7265, lat: 32.0045, bbuLoad: 58, aauStatus: 'normal', hasSmartBoard: true, users: 2156, prb: 65 },
+    { id: 'BS-003', name: '奥体主站-东', lng: 118.7320, lat: 32.0087, bbuLoad: 71, aauStatus: 'warning', hasSmartBoard: false, users: 3124, prb: 78 },
+    { id: 'BS-004', name: '奥体主站-西', lng: 118.7210, lat: 32.0087, bbuLoad: 45, aauStatus: 'normal', hasSmartBoard: false, users: 1832, prb: 52 },
+    { id: 'BS-005', name: '华彩中心站', lng: 118.7400, lat: 32.0120, bbuLoad: 82, aauStatus: 'normal', hasSmartBoard: true, users: 4521, prb: 85 },
+    { id: 'BS-006', name: '元通枢纽站', lng: 118.7200, lat: 32.0150, bbuLoad: 55, aauStatus: 'normal', hasSmartBoard: false, users: 1987, prb: 58 },
+    { id: 'BS-007', name: '奥体东站', lng: 118.7350, lat: 32.0050, bbuLoad: 68, aauStatus: 'normal', hasSmartBoard: true, users: 2678, prb: 70 },
+    { id: 'BS-008', name: '滨江新城站', lng: 118.7150, lat: 32.0020, bbuLoad: 42, aauStatus: 'normal', hasSmartBoard: false, users: 1234, prb: 48 },
+  ];
   return stations;
 }
 
-// ========== 地面保障人员 (严格约束在奥体周边 ±0.005) ==========
+// ========== 地面保障人员 ==========
 function generateGroundStaff() {
   const staff = [];
-  const centerLng = 118.7265;
-  const centerLat = 32.0087;
+  const centerLng = 118.728;
+  const centerLat = 32.005;
   
-  for (let i = 0; i < 20; i++) {
-    // 严格约束偏移量在 ±0.005 经纬度内
-    const lng = centerLng + (Math.random() - 0.5) * 0.01;
-    const lat = centerLat + (Math.random() - 0.5) * 0.01;
+  for (let i = 0; i < 16; i++) {
+    const lng = centerLng + (Math.random() - 0.5) * 0.012;
+    const lat = centerLat + (Math.random() - 0.5) * 0.012;
     staff.push({
       id: `STAFF-${i + 1}`,
       lng,
       lat,
-      role: i < 5 ? '工程师' : '巡检员',
+      role: i < 4 ? '工程师' : '巡检员',
     });
   }
   return staff;
 }
 
-// ========== 生成人流数据 (严格约束在奥体周边 ±0.005) ==========
-function generateCrowdData(currentTime) {
+// ========== 生成 OD 飞线数据 (人流从地铁站向奥体汇聚) ==========
+function generateODFlowData(currentTime) {
   const hour = parseInt(currentTime?.split(':')[0] || '20');
   const isPeak = hour >= 19 && hour <= 21;
-  const baseMultiplier = isPeak ? 3 : 1;
+  const baseMultiplier = isPeak ? 2.5 : 1;
   
-  const crowdPoints = [];
-  const centerLng = 118.7265;
-  const centerLat = 32.0087;
+  const flows = [];
+  const destinations = [
+    { lng: 118.7265, lat: 32.0087, name: '奥体中心' },
+    { lng: 118.7400, lat: 32.0120, name: '华彩中心' },
+  ];
+  const sources = [
+    { lng: 118.7350, lat: 32.0050, name: '奥体东地铁站' },
+    { lng: 118.7200, lat: 32.0150, name: '元通地铁站' },
+    { lng: 118.7150, lat: 32.0020, name: '滨江入口' },
+  ];
   
-  for (let i = 0; i < 30; i++) {
-    // 严格约束偏移量在 ±0.005 经纬度内
-    const lng = centerLng + (Math.random() - 0.5) * 0.01;
-    const lat = centerLat + (Math.random() - 0.5) * 0.01;
-    const count = Math.floor((Math.random() * 500 + 100) * baseMultiplier);
-    
-    crowdPoints.push({
-      id: `CROWD-${i}`,
-      lng,
-      lat,
-      count,
-      isAlert: count > 800, // 调整告警阈值为800人
+  let id = 0;
+  sources.forEach(src => {
+    destinations.forEach(dst => {
+      const count = Math.floor((Math.random() * 300 + 100) * baseMultiplier);
+      flows.push({
+        id: `FLOW-${id++}`,
+        fromLng: src.lng,
+        fromLat: src.lat,
+        toLng: dst.lng,
+        toLat: dst.lat,
+        count,
+        source: src.name,
+        target: dst.name,
+      });
     });
-  }
-  return crowdPoints;
+  });
+  
+  return flows;
 }
 
 // ========== 全局高德安全配置 ==========
 if (typeof window !== 'undefined') {
   window._AMapSecurityConfig = { securityJsCode: AMAP_SECURITY_CODE };
+}
+
+// ========== 3D 爆炸图详情面板组件 ==========
+function StationDetail3D({ data, onClose }) {
+  if (!data) return null;
+  
+  return (
+    <div className="absolute top-16 right-4 z-30 w-80 perspective-[1000px]">
+      <div className="glass-panel rounded-xl p-5 border border-cyan-400/40 relative backdrop-blur-xl bg-[#0B1A2A]/90">
+        {/* 关闭按钮 */}
+        <button 
+          onClick={onClose}
+          className="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors z-10"
+        >
+          <X className="w-4 h-4 text-white/70" />
+        </button>
+        
+        {/* 标题区 */}
+        <div className="flex items-center gap-3 mb-4 pr-8">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/30 to-blue-600/30 flex items-center justify-center border border-cyan-400/30">
+            <Radio className="w-5 h-5 text-cyan-400" />
+          </div>
+          <div>
+            <h3 className="text-white font-bold text-base">{data.name}</h3>
+            <p className="text-cyan-400/70 text-xs font-mono">{data.id} · 5G-A 宏站</p>
+          </div>
+        </div>
+        
+        {/* 核心指标 */}
+        <div className="grid grid-cols-3 gap-2 mb-5">
+          <div className="bg-white/5 rounded-lg p-2 text-center">
+            <Users className="w-4 h-4 text-blue-400 mx-auto mb-1" />
+            <div className="text-white font-bold text-sm">{data.users?.toLocaleString()}</div>
+            <div className="text-white/40 text-[10px]">连接用户</div>
+          </div>
+          <div className="bg-white/5 rounded-lg p-2 text-center">
+            <Activity className="w-4 h-4 text-yellow-400 mx-auto mb-1" />
+            <div className="text-white font-bold text-sm">{data.prb}%</div>
+            <div className="text-white/40 text-[10px]">PRB利用率</div>
+          </div>
+          <div className="bg-white/5 rounded-lg p-2 text-center">
+            <Zap className="w-4 h-4 text-green-400 mx-auto mb-1" />
+            <div className="text-white font-bold text-sm">{data.bbuLoad}%</div>
+            <div className="text-white/40 text-[10px]">BBU负载</div>
+          </div>
+        </div>
+        
+        {/* 3D 爆炸图核心区域 */}
+        <div className="relative h-56" style={{ perspective: '1000px' }}>
+          <div 
+            className="absolute inset-0 flex flex-col items-center justify-center"
+            style={{ transformStyle: 'preserve-3d', transform: 'rotateX(60deg) translateY(-20px)' }}
+          >
+            {/* 顶层 - AAU 天线层 */}
+            <div 
+              className="absolute w-24 h-24 rounded-2xl bg-gradient-to-b from-green-500/40 to-green-600/20 border-2 border-green-400/50 flex flex-col items-center justify-center shadow-2xl"
+              style={{ 
+                transform: 'translateZ(60px) translateY(-40px)',
+                boxShadow: '0 0 30px rgba(34, 197, 94, 0.4)',
+              }}
+            >
+              <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse mb-1" />
+              <span className="text-green-300 text-[10px] font-bold">AAU 天线层</span>
+              <span className="text-green-400/70 text-[8px]">64T64R 阵列</span>
+            </div>
+            
+            {/* 中层 - 无线智能板/算力层 */}
+            <div 
+              className="absolute w-28 h-28 rounded-2xl bg-gradient-to-b from-yellow-500/40 to-amber-600/20 border-2 border-yellow-400/50 flex flex-col items-center justify-center"
+              style={{ 
+                transform: 'translateZ(30px) translateY(-10px)',
+                boxShadow: data.hasSmartBoard ? '0 0 40px rgba(251, 191, 36, 0.6)' : 'none',
+              }}
+            >
+              <Cpu className="w-6 h-6 text-yellow-400 mb-1" />
+              <span className="text-yellow-300 text-[10px] font-bold">无线智能板</span>
+              {data.hasSmartBoard ? (
+                <span className="text-amber-300 text-[8px] font-bold animate-pulse">5G-A 已激活</span>
+              ) : (
+                <span className="text-white/40 text-[8px]">标准模式</span>
+              )}
+            </div>
+            
+            {/* 底层 - BBU 基带层 */}
+            <div 
+              className="absolute w-32 h-32 rounded-2xl bg-gradient-to-b from-blue-500/40 to-cyan-600/20 border-2 border-cyan-400/50 flex flex-col items-center justify-center"
+              style={{ 
+                transform: 'translateZ(0px) translateY(20px)',
+              }}
+            >
+              <div className="flex items-center gap-1 mb-1">
+                <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                <span className="w-2 h-2 rounded-full bg-cyan-400" />
+              </div>
+              <span className="text-cyan-300 text-[10px] font-bold">BBU 基带层</span>
+              <span className="text-cyan-400/70 text-[8px]">3CC 载波聚合</span>
+              <div className="mt-2 flex gap-1">
+                <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[7px]">n78</span>
+                <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[7px]">n79</span>
+                <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[7px]">n41</span>
+              </div>
+            </div>
+            
+            {/* 连接线效果 */}
+            <div className="absolute w-0.5 h-20 bg-gradient-to-b from-green-400/50 via-yellow-400/30 to-transparent" style={{ transform: 'translateZ(45px) translateY(-30px)' }} />
+            <div className="absolute w-0.5 h-16 bg-gradient-to-b from-yellow-400/50 via-cyan-400/30 to-transparent" style={{ transform: 'translateZ(15px) translateY(5px)' }} />
+          </div>
+        </div>
+        
+        {/* 底部状态栏 */}
+        <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${data.aauStatus === 'normal' ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`} />
+            <span className={`text-xs ${data.aauStatus === 'normal' ? 'text-green-400' : 'text-red-400'}`}>
+              AAU {data.aauStatus === 'normal' ? '正常运行' : '告警'}
+            </span>
+          </div>
+          <span className="text-white/30 text-xs font-mono">
+            {data.lng?.toFixed(4)}, {data.lat?.toFixed(4)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onAlertsChange }) {
@@ -107,15 +237,13 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
   const isInitializingRef = useRef(false);
   const isDestroyedRef = useRef(false);
   
-  // 图层引用
   const layersRef = useRef({
-    flow: null,
+    odFlow: null,
     zone: null,
     station: null,
     landmark: null,
     vehicle: null,
     staff: null,
-    crowd: null,
     alert: null,
   });
   
@@ -124,39 +252,33 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
   const [error, setError] = useState(null);
   const [selectedStation, setSelectedStation] = useState(null);
   
-  // 数据状态
   const [flowData, setFlowData] = useState(null);
   const [zoneData, setZoneData] = useState(null);
   const [stationData] = useState(() => generateBaseStations());
   const [staffData] = useState(() => generateGroundStaff());
-  const [crowdData, setCrowdData] = useState(() => generateCrowdData('20:00'));
+  const [odFlowData, setODFlowData] = useState(() => generateODFlowData('20:00'));
 
-  // ========== 更新告警 ==========
-  const updateAlerts = useCallback((crowdPoints) => {
-    const newAlerts = crowdPoints
-      .filter(p => p.isAlert)
-      .map(p => ({
-        id: `ALERT-${p.id}`,
-        level: 'high',
-        title: `区域人流超标: ${p.count}人`,
+  const updateAlerts = useCallback((flows) => {
+    const highFlowAlerts = flows
+      .filter(f => f.count > 500)
+      .slice(0, 3)
+      .map((f, idx) => ({
+        id: `FLOW-ALERT-${idx}`,
+        level: f.count > 600 ? 'high' : 'medium',
+        title: `${f.source} → ${f.target} 人流高峰`,
         time: '刚刚',
-        area: `奥体周边-${p.id}`,
-        lng: p.lng,
-        lat: p.lat,
+        area: f.source,
       }));
     
-    if (onAlertsChange) onAlertsChange(newAlerts);
+    if (onAlertsChange) onAlertsChange(highFlowAlerts);
   }, [onAlertsChange]);
 
-  // ========== 严格的初始化 useEffect ==========
   useEffect(() => {
-    // 严格拦截器 - 防止任何情况下的重复初始化
     if (isInitializingRef.current || sceneRef.current) {
       console.log('[AmapL7Scene] 拦截重复初始化');
       return;
     }
     
-    // 标记正在初始化
     isInitializingRef.current = true;
     isDestroyedRef.current = false;
     
@@ -169,7 +291,7 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
     }
 
     if (!AMAP_KEY) {
-      setError('高德 Key 未配置 (VITE_AMAP_KEY)');
+      setError('高德 Key 未配置');
       setLoading(false);
       isInitializingRef.current = false;
       return;
@@ -180,13 +302,10 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
 
     const initMap = async () => {
       try {
-        // 创建场景
         scene = new Scene({
           id: container,
           map: new GaodeMap({
-            pitch: 55,
-            zoom: 15,
-            center: CENTER_COORDINATES,
+            ...CAMERA_CONFIG, // 使用调整后的摄像机视角
             viewMode: '3D',
             style: 'amap://styles/darkblue',
             token: AMAP_KEY,
@@ -196,49 +315,47 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
         });
 
         scene.setBgColor('#0B1A2A');
-        
-        // 保存引用
         sceneRef.current = scene;
 
-        // 等待场景加载
         scene.on('loaded', async () => {
-          // 检查组件是否仍然挂载
           if (!isEffectActive || isDestroyedRef.current) {
-            console.log('[AmapL7Scene] 场景加载完成但组件已卸载，放弃初始化');
             if (scene) scene.destroy();
             return;
           }
           
           try {
-            // 注册图标
-            try {
-              await Promise.all([
-                scene.addImage('base-station', '/icons/base-station.svg'),
-                scene.addImage('comm-vehicle', '/icons/comm-vehicle.svg'),
-                scene.addImage('smart-board', '/icons/smart-board.svg'),
-              ]);
-            } catch (imgErr) {
-              console.warn('[AmapL7Scene] 图标注册失败，使用默认样式:', imgErr);
-            }
+            // 注册图标 (新增 sector-site)
+            await Promise.all([
+              scene.addImage('comm-vehicle', '/icons/comm-vehicle.svg'),
+              scene.addImage('smart-board', '/icons/smart-board.svg'),
+            ]).catch(() => console.warn('[AmapL7Scene] 部分图标加载失败'));
 
-            // 1. 人流动线图层
-            const flowLayer = new LineLayer({ zIndex: 1 })
-              .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
-              .size(2)
-              .shape('line')
-              .color('#00f0ff')
-              .animate({ enable: true, interval: 0.1, trailLength: 0.5, duration: 2 })
+            // 1. OD 飞线图层 (替代圆柱体)
+            const odFlowLayer = new LineLayer({ blend: 'normal', zIndex: 5 })
+              .source([], {
+                parser: {
+                  type: 'json',
+                  x: 'fromLng',
+                  y: 'fromLat',
+                  x1: 'toLng',
+                  y1: 'toLat',
+                }
+              })
+              .size('count', [1, 4]) // 人流多线就粗
+              .shape('arc3d') // 3D 弧线
+              .color('count', (c) => c > 500 ? '#ef4444' : '#22d3ee') // 人流大的红色，小的青色
+              .animate({ enable: true, duration: 2, trailLength: 0.5 }) // 流光动画
               .style({ opacity: 0.8 });
-            scene.addLayer(flowLayer);
-            layersRef.current.flow = flowLayer;
+            scene.addLayer(odFlowLayer);
+            layersRef.current.odFlow = odFlowLayer;
 
             // 2. 监控区域图层
             const zoneLayer = new PolygonLayer({ zIndex: 2 })
               .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
-              .color('rgba(0, 240, 255, 0.3)')
+              .color('rgba(0, 240, 255, 0.2)')
               .shape('extrude')
-              .size(50)
-              .style({ opacity: 0.6 });
+              .size(30)
+              .style({ opacity: 0.5 });
             scene.addLayer(zoneLayer);
             layersRef.current.zone = zoneLayer;
 
@@ -270,11 +387,11 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
                 }))
               }, { parser: { type: 'geojson' } })
               .shape('comm-vehicle')
-              .size(25);
+              .size(28);
             scene.addLayer(vehicleLayer);
             layersRef.current.vehicle = vehicleLayer;
 
-            // 5. 基站图层
+            // 5. 基站图层 - 使用三扇区图标 (暂时用 circle 作为 fallback)
             const stationLayer = new PointLayer({ zIndex: 6 })
               .source({
                 type: 'FeatureCollection',
@@ -284,12 +401,13 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
                   geometry: { type: 'Point', coordinates: [s.lng, s.lat] }
                 }))
               }, { parser: { type: 'geojson' } })
-              .shape(s => s.hasSmartBoard ? 'smart-board' : 'base-station')
-              .size(s => s.hasSmartBoard ? 28 : 22);
+              .shape(s => s.hasSmartBoard ? 'triangle' : 'circle') // 智能板用三角形，普通用圆形
+              .color(s => s.hasSmartBoard ? '#fbbf24' : '#00F0FF')
+              .size(30); // 放大尺寸
             scene.addLayer(stationLayer);
             layersRef.current.station = stationLayer;
 
-            // 点击事件
+            // 点击事件 - 打开 3D 爆炸图
             stationLayer.on('click', (e) => {
               if (e.feature) {
                 const station = e.feature.properties;
@@ -310,36 +428,19 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
               }, { parser: { type: 'geojson' } })
               .shape('circle')
               .color('#22c55e')
-              .size(8)
-              .style({ opacity: 0.9 });
+              .size(6)
+              .style({ opacity: 0.8 });
             scene.addLayer(staffLayer);
             layersRef.current.staff = staffLayer;
 
-            // 7. 人流热力图层 - 修复 Cylinder 尺寸映射
-            const crowdLayer = new PointLayer({ zIndex: 5 })
-              .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
-              .shape('cylinder')
-              // size 传入回调函数：固定半径为 5(米) 左右，高度根据 count 计算
-              .size('count', (count) => {
-                return [5, 5, Math.min(count / 10, 100)]; // [底面半径, 顶面半径, 高度]，限制最大高度100
-              })
-              .color('count', (count) => {
-                if (count > 800) return '#ef4444'; // 红色告警
-                if (count > 500) return '#fbbf24'; // 黄色预警
-                return '#34d399'; // 绿色正常
-              })
-              .style({ opacity: 0.8 });
-            scene.addLayer(crowdLayer);
-            layersRef.current.crowd = crowdLayer;
-
-            // 8. 告警呼吸灯图层 - 固定合理尺寸
+            // 7. 告警呼吸灯图层 - 固定合理尺寸
             const alertLayer = new PointLayer({ zIndex: 9 })
               .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
               .shape('circle')
               .color('#ef4444')
-              .size(25) // 固定一个合理的像素大小
+              .size(20)
               .animate({ enable: true, speed: 1, rings: 3 })
-              .style({ opacity: 0.8 });
+              .style({ opacity: 0.7 });
             scene.addLayer(alertLayer);
             layersRef.current.alert = alertLayer;
 
@@ -360,7 +461,7 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
         scene.on('error', (err) => {
           console.error('[AmapL7Scene] 场景错误:', err);
           if (isEffectActive && !isDestroyedRef.current) {
-            setError('地图渲染失败: ' + (err.message || '未知错误'));
+            setError('地图渲染失败');
             setLoading(false);
           }
         });
@@ -378,28 +479,21 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
 
     initMap();
 
-    // 【严格清理】
     return () => {
-      console.log('[AmapL7Scene] 组件卸载，开始清理');
       isEffectActive = false;
       isDestroyedRef.current = true;
-      
       if (sceneRef.current) {
         try {
           sceneRef.current.destroy();
-        } catch (e) {
-          console.warn('[AmapL7Scene] 销毁场景时出错:', e);
-        }
+        } catch (e) {}
         sceneRef.current = null;
       }
-      
-      // 重置所有状态
-      layersRef.current = { flow: null, zone: null, station: null, landmark: null, vehicle: null, staff: null, crowd: null, alert: null };
+      layersRef.current = { odFlow: null, zone: null, station: null, landmark: null, vehicle: null, staff: null, alert: null };
       isInitializingRef.current = false;
     };
-  }, []); // 空依赖数组，只执行一次
+  }, []);
 
-  // ========== 获取 API 数据 ==========
+  // 获取 API 数据
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -413,44 +507,37 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
         console.error('[AmapL7Scene] 获取数据失败:', err);
       }
     };
-    
     loadData();
   }, [currentTime]);
 
-  // ========== 更新人流数据和告警 ==========
+  // 更新 OD 飞线数据
   useEffect(() => {
     if (!sceneLoaded || !sceneRef.current || isDestroyedRef.current) return;
     
-    const newCrowdData = generateCrowdData(currentTime);
-    setCrowdData(newCrowdData);
-    updateAlerts(newCrowdData);
+    const newODFlowData = generateODFlowData(currentTime);
+    setODFlowData(newODFlowData);
+    updateAlerts(newODFlowData);
     
-    // 更新人流图层
-    if (layersRef.current.crowd) {
+    if (layersRef.current.odFlow) {
       try {
-        const geojson = {
-          type: 'FeatureCollection',
-          features: newCrowdData.map(p => ({
-            type: 'Feature',
-            properties: { count: p.count },
-            geometry: { type: 'Point', coordinates: [p.lng, p.lat] }
-          }))
-        };
-        layersRef.current.crowd.setData(geojson);
+        layersRef.current.odFlow.setData(newODFlowData);
       } catch (err) {
-        console.error('[AmapL7Scene] 更新人流数据失败:', err);
+        console.error('[AmapL7Scene] 更新OD飞线失败:', err);
       }
     }
     
-    // 更新告警图层
+    // 高流量告警点
     if (layersRef.current.alert) {
       try {
-        const alertPoints = newCrowdData.filter(p => p.isAlert);
+        const highFlowPoints = newODFlowData
+          .filter(f => f.count > 600)
+          .map(f => ({ lng: f.toLng, lat: f.toLat }));
+        
         const geojson = {
           type: 'FeatureCollection',
-          features: alertPoints.map(p => ({
+          features: highFlowPoints.map((p, idx) => ({
             type: 'Feature',
-            properties: {},
+            properties: { id: `ALERT-${idx}` },
             geometry: { type: 'Point', coordinates: [p.lng, p.lat] }
           }))
         };
@@ -461,25 +548,9 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
     }
   }, [sceneLoaded, currentTime, updateAlerts]);
 
-  // ========== 更新其他图层 ==========
+  // 更新其他图层
   useEffect(() => {
     if (!sceneLoaded || !sceneRef.current || isDestroyedRef.current) return;
-    
-    if (layersRef.current.flow && flowData) {
-      try {
-        const geojson = {
-          type: 'FeatureCollection',
-          features: flowData.map(item => ({
-            type: 'Feature',
-            properties: { type: item.type, volume: item.volume },
-            geometry: { type: 'LineString', coordinates: item.path }
-          }))
-        };
-        layersRef.current.flow.setData(geojson);
-      } catch (err) {
-        console.error('[AmapL7Scene] 更新人流线失败:', err);
-      }
-    }
     
     if (layersRef.current.zone && zoneData) {
       try {
@@ -488,7 +559,7 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
           type: 'FeatureCollection',
           features: zones.map(zone => ({
             type: 'Feature',
-            properties: { name: zone.name, height: zone.height, color: zone.color },
+            properties: { name: zone.name },
             geometry: { type: 'Polygon', coordinates: [zone.coordinates] }
           }))
         };
@@ -497,7 +568,7 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
         console.error('[AmapL7Scene] 更新区域数据失败:', err);
       }
     }
-  }, [sceneLoaded, flowData, zoneData]);
+  }, [sceneLoaded, zoneData]);
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-[#0B1A2A]">
@@ -522,98 +593,40 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
         </div>
       )}
       
-      {sceneLoaded && selectedStation && (
-        <div className="absolute top-20 right-4 z-20 w-72">
-          <div className="glass-panel rounded-xl p-4 border border-cyan-400/30 relative">
-            <button 
-              onClick={() => setSelectedStation(null)}
-              className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center"
-            >
-              <X className="w-4 h-4 text-white/60" />
-            </button>
-            
-            <div className="flex items-center gap-2 mb-3 pr-6">
-              <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-                <MapPin className="w-4 h-4 text-cyan-400" />
-              </div>
-              <div>
-                <h3 className="text-white font-bold text-sm">{selectedStation.name}</h3>
-                <p className="text-white/40 text-xs">{selectedStation.id}</p>
-              </div>
+      {/* 3D 爆炸图详情面板 */}
+      <StationDetail3D data={selectedStation} onClose={() => setSelectedStation(null)} />
+      
+      {/* 图例面板 - 已移除 "时空切片" */}
+      {sceneLoaded && (
+        <div className="absolute bottom-4 left-4 bg-cyber-panel/90 rounded-lg p-3 border border-cyan-400/30 z-10 max-w-[220px]">
+          <div className="text-cyan-400 text-xs font-bold mb-2">图例</div>
+          <div className="space-y-1.5 text-[10px] text-white/70">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-0.5 bg-gradient-to-r from-cyan-400 to-red-400 rounded" />
+              <span>OD 人流飞线</span>
             </div>
-            
-            <div className="space-y-2">
-              <div className="flex items-center justify-between p-2 rounded-lg bg-white/5">
-                <div className="flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-blue-400" />
-                  <span className="text-white/70 text-xs">BBU 负载</span>
-                </div>
-                <span className={`text-sm font-bold ${selectedStation.bbuLoad > 60 ? 'text-yellow-400' : 'text-green-400'}`}>
-                  {selectedStation.bbuLoad}%
-                </span>
-              </div>
-              
-              <div className="flex items-center justify-between p-2 rounded-lg bg-white/5">
-                <div className="flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-yellow-400" />
-                  <span className="text-white/70 text-xs">AAU 状态</span>
-                </div>
-                <span className={`text-sm font-bold ${selectedStation.aauStatus === 'normal' ? 'text-green-400' : 'text-red-400'}`}>
-                  {selectedStation.aauStatus === 'normal' ? '正常' : '告警'}
-                </span>
-              </div>
-              
-              <div className="flex items-center justify-between p-2 rounded-lg bg-white/5">
-                <div className="flex items-center gap-2">
-                  <Cpu className="w-4 h-4 text-purple-400" />
-                  <span className="text-white/70 text-xs">无线智能板</span>
-                </div>
-                <span className={`text-sm font-bold ${selectedStation.hasSmartBoard ? 'text-cyan-400' : 'text-white/30'}`}>
-                  {selectedStation.hasSmartBoard ? '已启用' : '未启用'}
-                </span>
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="w-4 h-4 rounded-full bg-yellow-400 border-2 border-yellow-500/50" />
+              <span>智能板基站</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-4 h-4 rounded-full bg-cyan-400 border-2 border-cyan-500/50" />
+              <span>5G 基站</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <img src="/icons/comm-vehicle.svg" className="w-4 h-4" alt="" />
+              <span>应急通信车</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-500" />
+              <span>保障人员</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+              <span>人流告警</span>
             </div>
           </div>
         </div>
-      )}
-      
-      {sceneLoaded && (
-        <>
-          <div className="absolute top-4 left-4 bg-cyber-panel/90 rounded-lg px-4 py-2 border border-cyan-400/30 z-10">
-            <div className="text-[10px] text-white/50">时空切片</div>
-            <div className="text-xl font-bold text-cyan-400">{currentTime}</div>
-          </div>
-          
-          <div className="absolute bottom-4 left-4 bg-cyber-panel/90 rounded-lg p-3 border border-cyan-400/30 z-10 max-w-[200px]">
-            <div className="text-cyan-400 text-xs font-bold mb-2">图例</div>
-            <div className="space-y-1.5 text-[10px] text-white/70">
-              <div className="flex items-center gap-2">
-                <img src="/icons/base-station.svg" className="w-4 h-4" alt="" />
-                <span>5G 基站</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <img src="/icons/smart-board.svg" className="w-4 h-4" alt="" />
-                <span>智能板基站</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <img src="/icons/comm-vehicle.svg" className="w-4 h-4" alt="" />
-                <span>应急通信车</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-green-500" />
-                <span>保障人员</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded bg-gradient-to-t from-green-400 via-yellow-400 to-red-500" />
-                <span>人流热力</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-                <span>人流告警</span>
-              </div>
-            </div>
-          </div>
-        </>
       )}
     </div>
   );
