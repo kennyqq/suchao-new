@@ -152,7 +152,7 @@ export default function EvaluationView() {
       <div className="flex-1 relative w-full h-full overflow-hidden">
         
         {/* ========== 左侧：经营变现与赛后关怀 ========== */}
-        <div className="absolute left-6 top-6 bottom-6 w-80 flex flex-col gap-4">
+        <div className="absolute left-6 top-6 bottom-32 w-80 flex flex-col gap-4 overflow-y-auto">
           
           {/* 面板标题 */}
           <div className="flex items-center gap-2 px-1 flex-shrink-0">
@@ -270,7 +270,7 @@ export default function EvaluationView() {
 
         {/* ========== 右侧：分层体验与智能体贡献 ========== */}
         <div 
-          className="absolute right-6 top-6 bottom-6 w-80 flex flex-col gap-6 pb-32 overflow-y-auto scrollbar-hide"
+          className="absolute right-6 top-6 bottom-32 w-80 flex flex-col gap-6 overflow-y-auto scrollbar-hide"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           {/* 隐藏滚动条样式 */}

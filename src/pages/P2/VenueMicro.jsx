@@ -25,12 +25,12 @@ export default function VenueMicro() {
           </div>
 
           {/* 左侧面板 - 悬浮 */}
-          <div className="absolute left-0 top-0 bottom-0 w-[320px] z-10 p-4">
+          <div className="absolute left-0 top-0 bottom-32 w-[320px] z-10 p-4">
             <LeftPanelP2 />
           </div>
 
           {/* 右侧面板 - 悬浮 */}
-          <div className="absolute right-0 top-0 bottom-0 w-[320px] z-10 p-4">
+          <div className="absolute right-0 top-0 bottom-32 w-[320px] z-10 p-4">
             <RightPanelP2 />
           </div>
         </div>
