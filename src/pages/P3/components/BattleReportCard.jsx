@@ -1,7 +1,34 @@
 import { motion } from 'framer-motion';
 import { X, Trophy, Users, Wifi, Crown } from 'lucide-react';
 
-export default function BattleReportCard({ onClose }) {
+// 默认核心数据
+const DEFAULT_CORE_METRICS = {
+  peakAttendance: { value: 65328, unit: '人', label: '奥体球迷峰值' },
+  peakTraffic: { value: 15.8, unit: 'TB', label: '峰值话务量' },
+  packages5GA: { value: 850, unit: '份', label: '5G-A 场馆包销量' }
+};
+
+const DEFAULT_MATCH = {
+  date: '5月2日',
+  home: '南京',
+  away: '常州',
+  score: '2:1',
+  venue: '南京奥体中心'
+};
+
+/**
+ * 战报卡片组件
+ * @param {Object} props
+ * @param {Function} props.onClose - 关闭回调
+ * @param {Object} props.data - 战报数据
+ */
+export default function BattleReportCard({ onClose, data = {} }) {
+  const { 
+    match = DEFAULT_MATCH, 
+    coreMetrics = DEFAULT_CORE_METRICS,
+    assuranceLevel = 'S'
+  } = data;
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.85, y: 30 }}
@@ -49,23 +76,23 @@ export default function BattleReportCard({ onClose }) {
         {/* 对阵比分 */}
         <div className="flex items-center justify-center gap-10 mt-6">
           <div className="text-center">
-            <div className="text-4xl font-din font-bold text-white tracking-wider">南京</div>
-            <div className="text-xs text-white/40 mt-1 tracking-widest">NANJING</div>
+            <div className="text-4xl font-din font-bold text-white tracking-wider">{match.home}</div>
+            <div className="text-xs text-white/40 mt-1 tracking-widest">{match.home.toUpperCase()}</div>
           </div>
           
           <div className="flex items-center gap-3 px-6 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
-            <span className="text-5xl font-din font-bold text-yellow-400">2</span>
+            <span className="text-5xl font-din font-bold text-yellow-400">{match.score.split(':')[0]}</span>
             <span className="text-2xl text-white/30">:</span>
-            <span className="text-5xl font-din font-bold text-white/70">1</span>
+            <span className="text-5xl font-din font-bold text-white/70">{match.score.split(':')[1]}</span>
           </div>
           
           <div className="text-center">
-            <div className="text-4xl font-din font-bold text-white/70 tracking-wider">常州</div>
-            <div className="text-xs text-white/40 mt-1 tracking-widest">CHANGZHOU</div>
+            <div className="text-4xl font-din font-bold text-white/70 tracking-wider">{match.away}</div>
+            <div className="text-xs text-white/40 mt-1 tracking-widest">{match.away.toUpperCase()}</div>
           </div>
         </div>
         
-        <div className="text-xs text-white/30 mt-3">5月2日 · 南京奥体中心</div>
+        <div className="text-xs text-white/30 mt-3">{match.date} · {match.venue}</div>
       </div>
 
       {/* 金色分隔线 */}
@@ -75,7 +102,7 @@ export default function BattleReportCard({ onClose }) {
 
       {/* 核心数据 - 3列荣誉展台 */}
       <div className="grid grid-cols-3 gap-6 mb-8">
-        {/* 展台1 */}
+        {/* 展台1: 峰值人数 */}
         <motion.div 
           className="relative text-center p-5 rounded-xl"
           style={{
@@ -88,17 +115,18 @@ export default function BattleReportCard({ onClose }) {
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center">
             <Users className="w-3 h-3 text-yellow-400" />
           </div>
-          <div className="text-3xl font-din font-bold text-white mt-2">65,328</div>
-          <div className="text-[11px] text-white/50 mt-1">奥体球迷峰值</div>
-          <div className="text-[10px] text-yellow-400/80 mt-0.5">人</div>
+          <div className="text-3xl font-din font-bold text-white mt-2">
+            {coreMetrics.peakAttendance.value.toLocaleString()}
+          </div>
+          <div className="text-[11px] text-white/50 mt-1">{coreMetrics.peakAttendance.label}</div>
+          <div className="text-[10px] text-yellow-400/80 mt-0.5">{coreMetrics.peakAttendance.unit}</div>
           
-          {/* 展台底座光 */}
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-px" style={{
             background: 'linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.5), transparent)'
           }} />
         </motion.div>
 
-        {/* 展台2 */}
+        {/* 展台2: 峰值流量 */}
         <motion.div 
           className="relative text-center p-5 rounded-xl"
           style={{
@@ -111,16 +139,16 @@ export default function BattleReportCard({ onClose }) {
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center">
             <Wifi className="w-3 h-3 text-cyan-400" />
           </div>
-          <div className="text-3xl font-din font-bold text-white mt-2">15.8</div>
-          <div className="text-[11px] text-white/50 mt-1">峰值话务量</div>
-          <div className="text-[10px] text-cyan-400/80 mt-0.5">TB</div>
+          <div className="text-3xl font-din font-bold text-white mt-2">{coreMetrics.peakTraffic.value}</div>
+          <div className="text-[11px] text-white/50 mt-1">{coreMetrics.peakTraffic.label}</div>
+          <div className="text-[10px] text-cyan-400/80 mt-0.5">{coreMetrics.peakTraffic.unit}</div>
           
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-px" style={{
             background: 'linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.5), transparent)'
           }} />
         </motion.div>
 
-        {/* 展台3 */}
+        {/* 展台3: 5G-A 套餐 */}
         <motion.div 
           className="relative text-center p-5 rounded-xl"
           style={{
@@ -133,9 +161,9 @@ export default function BattleReportCard({ onClose }) {
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center">
             <Crown className="w-3 h-3 text-yellow-400" />
           </div>
-          <div className="text-3xl font-din font-bold text-white mt-2">850</div>
-          <div className="text-[11px] text-white/50 mt-1">5G-A 场馆包</div>
-          <div className="text-[10px] text-yellow-400/80 mt-0.5">份</div>
+          <div className="text-3xl font-din font-bold text-white mt-2">{coreMetrics.packages5GA.value}</div>
+          <div className="text-[11px] text-white/50 mt-1">{coreMetrics.packages5GA.label}</div>
+          <div className="text-[10px] text-yellow-400/80 mt-0.5">{coreMetrics.packages5GA.unit}</div>
           
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-px" style={{
             background: 'linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.5), transparent)'
@@ -161,7 +189,7 @@ export default function BattleReportCard({ onClose }) {
           transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
         >
           <Trophy className="w-6 h-6 text-yellow-400" />
-          <span className="text-xl font-bold text-yellow-400 tracking-widest">S级保障 · 圆满完成</span>
+          <span className="text-xl font-bold text-yellow-400 tracking-widest">{assuranceLevel}级保障 · 圆满完成</span>
         </motion.div>
       </div>
 

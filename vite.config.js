@@ -6,7 +6,30 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
-    host: true
+    host: true,
+    // ============================================
+    // Vite 反向代理配置
+    // 将 /api 请求转发到 BFF 服务 (localhost:3001)
+    // ============================================
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        // pathRewrite 在 Vite 中不需要，直接转发 /api 路径
+        configure: (proxy, options) => {
+          // 可选：添加代理日志
+          proxy.on('error', (err, req, res) => {
+            console.log('proxy error', err);
+          });
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            console.log('Sending Request to the Target:', req.method, req.url);
+          });
+          proxy.on('proxyRes', (proxyRes, req, res) => {
+            console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
+          });
+        }
+      }
+    }
   },
   build: {
     outDir: 'dist',

@@ -1,14 +1,16 @@
 import { motion } from 'framer-motion';
-import { Bot, Shield, Zap, Brain, Activity } from 'lucide-react';
+import { Bot, Shield, Activity, Zap, Brain } from 'lucide-react';
 
-const contributions = [
+// 默认智能体贡献数据
+const DEFAULT_CONTRIBUTIONS = [
   { 
     label: '智能体自动优化', 
     value: '156 次', 
     icon: Bot,
     color: '#00F0FF',
     desc: '参数自适应调整',
-    trend: '+12% 效率提升'
+    trend: '+12% 效率提升',
+    type: 'optimization'
   },
   { 
     label: '潜在隐患拦截', 
@@ -16,7 +18,8 @@ const contributions = [
     icon: Shield,
     color: '#00FF88',
     desc: '拥塞风险预警',
-    trend: '0 故障发生'
+    trend: '0 故障发生',
+    type: 'prevention'
   },
   { 
     label: 'VIP感知保障', 
@@ -24,7 +27,8 @@ const contributions = [
     icon: Activity,
     color: '#FFD700',
     desc: '钻白卡用户零投诉',
-    trend: '满意度 4.9/5'
+    trend: '满意度 4.9/5',
+    type: 'vip'
   },
   { 
     label: '资源智能调度', 
@@ -32,49 +36,74 @@ const contributions = [
     icon: Zap,
     color: '#FF6B6B',
     desc: '动态负载均衡',
-    trend: '峰值承载提升'
+    trend: '峰值承载提升',
+    type: 'resource'
   },
 ];
 
-export default function AgentContribution() {
+// 图标映射
+const ICON_MAP = {
+  Bot,
+  Shield,
+  Activity,
+  Zap,
+};
+
+/**
+ * 智能体贡献组件
+ * @param {Object} props
+ * @param {Array} props.data - 智能体贡献数据
+ */
+export default function AgentContribution({ data }) {
+  // 使用传入的数据或默认数据
+  const contributions = data && data.length > 0 
+    ? data.map(item => ({
+        ...item,
+        icon: ICON_MAP[item.icon] || Bot, // 支持字符串图标名称映射
+      }))
+    : DEFAULT_CONTRIBUTIONS;
+
   return (
     <div className="space-y-2">
-      {contributions.map((item, index) => (
-        <motion.div
-          key={item.label}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: index * 0.1 }}
-          className="p-3 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-colors group"
-        >
-          <div className="flex items-center gap-3">
-            {/* 图标 */}
-            <div 
-              className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ backgroundColor: `${item.color}20` }}
-            >
-              <item.icon className="w-5 h-5" style={{ color: item.color }} />
-            </div>
-            
-            {/* 内容 */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-0.5">
-                <span className="text-white/80 text-xs">{item.label}</span>
-                <span className="font-bold font-orbitron" style={{ color: item.color }}>
-                  {item.value}
-                </span>
+      {contributions.map((item, index) => {
+        const Icon = item.icon;
+        return (
+          <motion.div
+            key={item.label}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: index * 0.1 }}
+            className="p-3 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-colors group"
+          >
+            <div className="flex items-center gap-3">
+              {/* 图标 */}
+              <div 
+                className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: `${item.color}20` }}
+              >
+                <Icon className="w-5 h-5" style={{ color: item.color }} />
               </div>
               
-              <div className="flex items-center justify-between">
-                <span className="text-white/40 text-[10px]">{item.desc}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/60">
-                  {item.trend}
-                </span>
+              {/* 内容 */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-white/80 text-xs">{item.label}</span>
+                  <span className="font-bold font-orbitron" style={{ color: item.color }}>
+                    {item.value}
+                  </span>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span className="text-white/40 text-[10px]">{item.desc}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/60">
+                    {item.trend}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        </motion.div>
-      ))}
+          </motion.div>
+        );
+      })}
       
       {/* 底部智能体标语 */}
       <motion.div

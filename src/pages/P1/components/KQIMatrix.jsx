@@ -1,14 +1,13 @@
 import { motion } from 'framer-motion';
 import { Wifi, Smartphone, MessageCircle, Video } from 'lucide-react';
 
-// KQI 数据 - 带趋势图数据
-const KQI_DATA = [
+// 默认 KQI 数据（当 API 数据未加载时显示）
+const DEFAULT_KQI_DATA = [
   { 
     label: '总流量', 
     value: '8,420', 
     unit: 'GB', 
     trend: '+12%', 
-    icon: Wifi,
     trendData: [6500, 7200, 6800, 7500, 8200, 7900, 8420],
     isHigherBetter: true,
   },
@@ -17,7 +16,6 @@ const KQI_DATA = [
     value: '420', 
     unit: 'Erl', 
     trend: '+5%', 
-    icon: MessageCircle,
     trendData: [380, 390, 400, 395, 410, 415, 420],
     isHigherBetter: true,
   },
@@ -26,7 +24,6 @@ const KQI_DATA = [
     value: '520', 
     unit: 'Mbps', 
     trend: '-2%', 
-    icon: Smartphone,
     trendData: [480, 510, 530, 545, 535, 528, 520],
     isHigherBetter: true,
   },
@@ -35,13 +32,20 @@ const KQI_DATA = [
     value: '12', 
     unit: 'ms', 
     trend: '-8%', 
-    icon: Video,
     trendData: [18, 16, 15, 14, 13, 12.5, 12],
     isHigherBetter: false,
   },
 ];
 
-// 生成 SVG 路径
+// 图标映射
+const ICON_MAP = {
+  '总流量': Wifi,
+  '语音话务量': MessageCircle,
+  '平均吞吐': Smartphone,
+  '时延': Video,
+};
+
+// 生成 SVG Sparkline 路径
 const generateSparklinePath = (data, width, height) => {
   const max = Math.max(...data);
   const min = Math.min(...data);
@@ -60,9 +64,9 @@ const generateAreaPath = (data, width, height) => {
   return `${pathD} L ${width} ${height} L 0 ${height} Z`;
 };
 
-// 单个 KPI 卡片组件 - 大图模式
+// 单个 KPI 卡片组件
 function KPICard({ item, index }) {
-  const Icon = item.icon;
+  const Icon = ICON_MAP[item.label] || Wifi;
   const isPositive = item.trend.startsWith('+');
   const trendColor = item.isHigherBetter 
     ? (isPositive ? 'text-cyber-cyan' : 'text-cyber-red')
@@ -128,10 +132,18 @@ function KPICard({ item, index }) {
   );
 }
 
-export default function KQIMatrix() {
+/**
+ * KQI 矩阵组件
+ * @param {Object} props
+ * @param {Array} props.data - 从 BFF 获取的 KQI 数据
+ */
+export default function KQIMatrix({ data }) {
+  // 使用传入的数据或默认数据
+  const displayData = data && data.length > 0 ? data : DEFAULT_KQI_DATA;
+  
   return (
     <div className="grid grid-cols-2 gap-3">
-      {KQI_DATA.map((item, index) => (
+      {displayData.map((item, index) => (
         <KPICard key={item.label} item={item} index={index} />
       ))}
     </div>

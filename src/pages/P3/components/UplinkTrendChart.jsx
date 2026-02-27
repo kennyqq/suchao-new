@@ -1,7 +1,7 @@
 import ReactECharts from 'echarts-for-react';
 
-// 模拟上行流量数据，20:45 是进球时刻
-const UPLINK_DATA = [
+// 默认上行流量数据
+const DEFAULT_UPLINK_DATA = [
   { time: '19:00', value: 1.2 },
   { time: '19:15', value: 1.5 },
   { time: '19:30', value: 2.1 },
@@ -17,13 +17,21 @@ const UPLINK_DATA = [
   { time: '22:00', value: 1.8 },
 ];
 
-export default function UplinkTrendChart() {
+/**
+ * 上行流量趋势图组件
+ * @param {Object} props
+ * @param {Array} props.data - 上行流量数据点数组
+ */
+export default function UplinkTrendChart({ data }) {
+  // 使用传入的数据或默认数据
+  const chartData = data && data.length > 0 ? data : DEFAULT_UPLINK_DATA;
+
   const option = {
     grid: { top: 40, bottom: 25, left: 30, right: 15, containLabel: true },
     xAxis: {
       type: 'category',
       boundaryGap: false,
-      data: UPLINK_DATA.map(d => d.time),
+      data: chartData.map(d => d.time),
       axisLine: { lineStyle: { color: 'rgba(255,255,255,0.2)' } },
       axisLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 10 },
     },
@@ -37,7 +45,7 @@ export default function UplinkTrendChart() {
     },
     series: [
       {
-        data: UPLINK_DATA.map(d => ({
+        data: chartData.map(d => ({
           value: d.value,
           itemStyle: d.isPeak ? { color: '#FFD700' } : undefined,
         })),
@@ -59,7 +67,7 @@ export default function UplinkTrendChart() {
         },
         symbol: 'circle',
         symbolSize: (data, params) => {
-          return UPLINK_DATA[params.dataIndex]?.isPeak ? 10 : 4;
+          return chartData[params.dataIndex]?.isPeak ? 10 : 4;
         },
         markPoint: {
           data: [
@@ -86,7 +94,7 @@ export default function UplinkTrendChart() {
       textStyle: { color: '#fff', fontSize: 12 },
       formatter: (params) => {
         const data = params[0];
-        const isPeak = UPLINK_DATA[data.dataIndex]?.isPeak;
+        const isPeak = chartData[data.dataIndex]?.isPeak;
         return `
           <div style="padding: 4px;">
             <div style="color: rgba(255,255,255,0.6); font-size: 10px;">${data.name}</div>
