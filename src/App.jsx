@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Header from './components/Header';
+import TimelineV3 from './components/TimelineV3';
 
 // P0 宏观溯源
 import LeftPanelP0 from './components/LeftPanel';
@@ -75,7 +76,7 @@ function GlobalDefense() {
 export default function App() {
   return (
     <Router>
-      <div className="w-full h-screen bg-cyber-bg overflow-hidden flex flex-col">
+      <div className="w-full h-screen bg-cyber-bg overflow-hidden flex flex-col relative">
         <Header />
         <div className="flex-1 relative">
           <Routes>
@@ -85,6 +86,10 @@ export default function App() {
             <Route path="/p2" element={<VenueMicro />} />
             <Route path="/p3" element={<EvaluationView />} />
           </Routes>
+        </div>
+        {/* 底部导航条 - 固定在底部 */}
+        <div className="absolute bottom-0 w-full z-[100]">
+          <TimelineV3 />
         </div>
       </div>
     </Router>

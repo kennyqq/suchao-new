@@ -185,10 +185,10 @@ const useDashboardStore = create(
               fetchP0TourismAnalysis(),
             ]);
 
-            set({
+            set((state) => ({
               p0Data: { migration, tourismIndex, transport, tourismAnalysis },
-              loading: (state) => ({ ...state.loading, p0: false }),
-            });
+              loading: { ...state.loading, p0: false },
+            }));
           } catch (error) {
             set((state) => ({
               loading: { ...state.loading, p0: false },
@@ -211,10 +211,10 @@ const useDashboardStore = create(
               fetchP1OpLogs(),
             ]);
 
-            set({
+            set((state) => ({
               p1Data: { ...get().p1Data, global, kqi, opLogs },
-              loading: (state) => ({ ...state.loading, p1: false }),
-            });
+              loading: { ...state.loading, p1: false },
+            }));
           } catch (error) {
             set((state) => ({
               loading: { ...state.loading, p1: false },
@@ -245,10 +245,10 @@ const useDashboardStore = create(
 
           try {
             const venue = await fetchP2VenueData();
-            set({
+            set((state) => ({
               p2Data: { venue },
-              loading: (state) => ({ ...state.loading, p2: false }),
-            });
+              loading: { ...state.loading, p2: false },
+            }));
           } catch (error) {
             set((state) => ({
               loading: { ...state.loading, p2: false },
@@ -266,10 +266,10 @@ const useDashboardStore = create(
 
           try {
             const evaluation = await fetchP3EvaluationData();
-            set({
+            set((state) => ({
               p3Data: { evaluation },
-              loading: (state) => ({ ...state.loading, p3: false }),
-            });
+              loading: { ...state.loading, p3: false },
+            }));
           } catch (error) {
             set((state) => ({
               loading: { ...state.loading, p3: false },
@@ -287,11 +287,11 @@ const useDashboardStore = create(
 
           try {
             const alerts = await fetchAlerts();
-            set({
+            set((state) => ({
               activeAlerts: alerts,
               unreadAlertCount: alerts.filter((a) => !a.read && a.level !== 'info').length,
-              loading: (state) => ({ ...state.loading, alerts: false }),
-            });
+              loading: { ...state.loading, alerts: false },
+            }));
           } catch (error) {
             set((state) => ({
               loading: { ...state.loading, alerts: false },

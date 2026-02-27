@@ -210,32 +210,32 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00' }) {
     }
   }, [sceneLoaded, flowData, zoneData, stationData]);
 
-  if (loading) {
-    return (
-      <div className="absolute inset-0 flex items-center justify-center bg-cyber-bg/80 z-50">
-        <div className="text-center">
-          <Loader2 className="w-10 h-10 text-cyan-400 animate-spin mx-auto mb-3" />
-          <div className="text-cyan-400 text-lg">初始化 3D 地图...</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="absolute inset-0 flex items-center justify-center bg-cyber-bg/90 z-50">
-        <div className="text-center text-yellow-400">
-          <div className="text-xl font-bold mb-2">地图加载失败</div>
-          <div className="text-sm text-white/60">{error}</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="relative w-full h-full overflow-hidden bg-[#0B1A2A]">
+      {/* 核心：地图容器必须永远存在！ */}
       <div ref={containerRef} className="absolute inset-0 w-full h-full" />
       
+      {/* 加载遮罩悬浮于上方 */}
+      {(loading || !sceneLoaded) && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#0B1A2A]/90 backdrop-blur-sm">
+          <div className="text-center">
+            <Loader2 className="w-10 h-10 text-cyan-400 animate-spin mx-auto mb-3" />
+            <div className="text-cyan-400 text-lg">初始化 3D 地图...</div>
+          </div>
+        </div>
+      )}
+      
+      {/* 错误遮罩 */}
+      {error && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#0B1A2A]/90 backdrop-blur-sm">
+          <div className="text-center text-yellow-400">
+            <div className="text-xl font-bold mb-2">地图加载失败</div>
+            <div className="text-sm text-white/60">{error}</div>
+          </div>
+        </div>
+      )}
+      
+      {/* 其他 UI 面板 */}
       {sceneLoaded && (
         <>
           <div className="absolute top-4 right-4 bg-cyber-panel/90 rounded-lg p-3 border border-cyan-400/30 z-10">
