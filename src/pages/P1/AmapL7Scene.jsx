@@ -319,9 +319,22 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
         scene.setBgColor('#0B1A2A');
         sceneRef.current = scene;
 
+        // 【安全绑定】确保 scene 存在才绑定事件
+        if (!scene) {
+          console.error('[AmapL7Scene] Scene 创建失败');
+          setError('地图引擎初始化失败');
+          setLoading(false);
+          isInitializingRef.current = false;
+          return;
+        }
+
         scene.on('loaded', async () => {
+          // 【双重检查】确保组件仍挂载且未销毁
           if (!isEffectActive || isDestroyedRef.current) {
-            if (scene) scene.destroy();
+            console.log('[AmapL7Scene] 组件已卸载，放弃图层初始化');
+            if (scene && !scene.destroyed) {
+              try { scene.destroy(); } catch (e) {}
+            }
             return;
           }
           
@@ -466,13 +479,16 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
           }
         });
 
-        scene.on('error', (err) => {
-          console.error('[AmapL7Scene] 场景错误:', err);
-          if (isEffectActive && !isDestroyedRef.current) {
-            setError('地图渲染失败');
-            setLoading(false);
-          }
-        });
+        // 【安全绑定】错误事件同样检查
+        if (scene) {
+          scene.on('error', (err) => {
+            console.error('[AmapL7Scene] 场景错误:', err);
+            if (isEffectActive && !isDestroyedRef.current) {
+              setError('地图渲染失败');
+              setLoading(false);
+            }
+          });
+        }
 
       } catch (err) {
         console.error('[AmapL7Scene] 初始化严重异常:', err);
