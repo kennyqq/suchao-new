@@ -10,6 +10,60 @@ const CENTER_COORDINATES = [118.7265, 32.0087];
 // 默认空 GeoJSON
 const EMPTY_GEOJSON = { type: 'FeatureCollection', features: [] };
 
+// ========== 全局高德安全配置（必须在组件渲染前执行） ==========
+if (typeof window !== 'undefined') {
+  window._AMapSecurityConfig = {
+    securityJsCode: AMAP_SECURITY_CODE,
+  };
+}
+
+// ========== 数据清洗工具函数 ==========
+function cleanCoordinates(data) {
+  if (!Array.isArray(data)) return [];
+  return data.filter(item => {
+    const lng = parseFloat(item.lng ?? item.longitude ?? item.lon);
+    const lat = parseFloat(item.lat ?? item.latitude ?? item.lat);
+    return !isNaN(lng) && !isNaN(lat) && lng !== 0 && lat !== 0;
+  }).map(item => ({
+    ...item,
+    lng: parseFloat(item.lng ?? item.longitude ?? item.lon),
+    lat: parseFloat(item.lat ?? item.latitude ?? item.lat),
+  }));
+}
+
+function cleanFlowData(data) {
+  if (!Array.isArray(data)) return [];
+  return data.filter(item => {
+    if (!item.path || !Array.isArray(item.path)) return false;
+    // 检查路径中所有坐标是否合法
+    return item.path.every(coord => 
+      Array.isArray(coord) && 
+      coord.length >= 2 &&
+      !isNaN(parseFloat(coord[0])) && 
+      !isNaN(parseFloat(coord[1]))
+    );
+  });
+}
+
+function cleanZoneData(data) {
+  if (!data) return [];
+  const zones = data.defenseZones || data;
+  if (!Array.isArray(zones)) return [];
+  
+  return zones.filter(zone => {
+    if (!zone.coordinates || !Array.isArray(zone.coordinates)) return false;
+    // 检查多边形坐标是否合法
+    return zone.coordinates.every(ring => 
+      Array.isArray(ring) && ring.every(coord =>
+        Array.isArray(coord) &&
+        coord.length >= 2 &&
+        !isNaN(parseFloat(coord[0])) &&
+        !isNaN(parseFloat(coord[1]))
+      )
+    );
+  });
+}
+
 export default function AmapL7Scene({ onStationClick, currentTime = '20:00' }) {
   const containerRef = useRef(null);
   const sceneRef = useRef(null);
@@ -39,15 +93,10 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00' }) {
         }
 
         if (!AMAP_KEY) {
-          throw new Error('高德 Key 未配置');
+          throw new Error('高德 Key 未配置 (VITE_AMAP_KEY)');
         }
 
-        // 配置高德安全密钥
-        if (typeof window !== 'undefined') {
-          window._AMapSecurityConfig = { securityJsCode: AMAP_SECURITY_CODE };
-        }
-
-        // 创建场景
+        // 创建场景 - 传入正确的 token
         scene = new Scene({
           id: containerRef.current,
           map: new GaodeMap({
@@ -56,6 +105,7 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00' }) {
             center: CENTER_COORDINATES,
             viewMode: '3D',
             style: 'amap://styles/darkblue',
+            token: AMAP_KEY, // <-- 关键：传入正确的 Key
           }),
         });
 
@@ -66,50 +116,58 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00' }) {
         scene.on('loaded', () => {
           if (!isMounted) return;
           
-          // 初始化空图层（必须给默认空数据）
-          
-          // 1. 人流动线图层
-          const flowLayer = new LineLayer({ zIndex: 1 })
-            .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
-            .size(2)
-            .shape('line')
-            .color('#00f0ff')
-            .animate({ enable: true, interval: 0.1, trailLength: 0.5, duration: 2 })
-            .style({ opacity: 0.8 });
-          scene.addLayer(flowLayer);
-          flowLayerRef.current = flowLayer;
+          try {
+            // 初始化空图层（必须给默认空数据）
+            
+            // 1. 人流动线图层
+            const flowLayer = new LineLayer({ zIndex: 1 })
+              .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
+              .size(2)
+              .shape('line')
+              .color('#00f0ff')
+              .animate({ enable: true, interval: 0.1, trailLength: 0.5, duration: 2 })
+              .style({ opacity: 0.8 });
+            scene.addLayer(flowLayer);
+            flowLayerRef.current = flowLayer;
 
-          // 2. 监控区域图层
-          const zoneLayer = new PolygonLayer({ zIndex: 2 })
-            .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
-            .color('rgba(0, 240, 255, 0.3)')
-            .shape('extrude')
-            .size(50)
-            .style({ opacity: 0.6 });
-          scene.addLayer(zoneLayer);
-          zoneLayerRef.current = zoneLayer;
+            // 2. 监控区域图层
+            const zoneLayer = new PolygonLayer({ zIndex: 2 })
+              .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
+              .color('rgba(0, 240, 255, 0.3)')
+              .shape('extrude')
+              .size(50)
+              .style({ opacity: 0.6 });
+            scene.addLayer(zoneLayer);
+            zoneLayerRef.current = zoneLayer;
 
-          // 3. 基站点位图层
-          const stationLayer = new PointLayer({ zIndex: 3 })
-            .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
-            .shape('circle')
-            .color('#00F0FF')
-            .size(20)
-            .style({ opacity: 0.8 })
-            .animate({ enable: true, speed: 0.02, rings: 2 });
-          scene.addLayer(stationLayer);
-          stationLayerRef.current = stationLayer;
-          
-          // 点击事件
-          stationLayer.on('click', (e) => {
-            if (e.feature && onStationClick) {
-              onStationClick(e.feature.properties);
+            // 3. 基站点位图层
+            const stationLayer = new PointLayer({ zIndex: 3 })
+              .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
+              .shape('circle')
+              .color('#00F0FF')
+              .size(20)
+              .style({ opacity: 0.8 })
+              .animate({ enable: true, speed: 0.02, rings: 2 });
+            scene.addLayer(stationLayer);
+            stationLayerRef.current = stationLayer;
+            
+            // 点击事件
+            stationLayer.on('click', (e) => {
+              if (e.feature && onStationClick) {
+                onStationClick(e.feature.properties);
+              }
+            });
+
+            setSceneLoaded(true);
+            setLoading(false);
+            console.log('[AmapL7Scene] 地图和空图层初始化完成');
+          } catch (layerErr) {
+            console.error('[AmapL7Scene] 图层初始化错误:', layerErr);
+            if (isMounted) {
+              setError('图层初始化失败: ' + layerErr.message);
+              setLoading(false);
             }
-          });
-
-          setSceneLoaded(true);
-          setLoading(false);
-          console.log('[AmapL7Scene] 地图和空图层初始化完成');
+          }
         });
 
         scene.on('error', (err) => {
@@ -131,10 +189,15 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00' }) {
 
     initMap();
 
+    // 清理函数 - 确保组件卸载时销毁场景
     return () => {
       isMounted = false;
       if (sceneRef.current) {
-        try { sceneRef.current.destroy(); } catch (e) {}
+        try {
+          sceneRef.current.destroy();
+        } catch (e) {
+          console.warn('[AmapL7Scene] 销毁场景时出错:', e);
+        }
         sceneRef.current = null;
       }
     };
@@ -150,10 +213,20 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00' }) {
           fetchBaseStations()
         ]);
         
-        setFlowData(flow);
-        setZoneData(zones);
-        setStationData(stations);
-        console.log('[AmapL7Scene] API 数据加载完成');
+        // 数据清洗 - 过滤非法坐标
+        const cleanFlow = cleanFlowData(flow);
+        const cleanZones = cleanZoneData(zones);
+        const cleanStations = cleanCoordinates(stations);
+        
+        setFlowData(cleanFlow);
+        setZoneData(cleanZones);
+        setStationData(cleanStations);
+        
+        console.log('[AmapL7Scene] API 数据加载完成:', {
+          flow: cleanFlow.length,
+          zones: cleanZones.length,
+          stations: cleanStations.length
+        });
       } catch (err) {
         console.error('[AmapL7Scene] 获取数据失败:', err);
       }
@@ -168,45 +241,56 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00' }) {
     
     // 更新人流数据
     if (flowLayerRef.current && flowData && flowData.length > 0) {
-      const geojson = {
-        type: 'FeatureCollection',
-        features: flowData.map(item => ({
-          type: 'Feature',
-          properties: { type: item.type, volume: item.volume },
-          geometry: { type: 'LineString', coordinates: item.path }
-        }))
-      };
-      flowLayerRef.current.setData(geojson);
-      console.log('[AmapL7Scene] 人流数据已更新');
+      try {
+        const geojson = {
+          type: 'FeatureCollection',
+          features: flowData.map(item => ({
+            type: 'Feature',
+            properties: { type: item.type, volume: item.volume },
+            geometry: { type: 'LineString', coordinates: item.path }
+          }))
+        };
+        flowLayerRef.current.setData(geojson);
+        console.log('[AmapL7Scene] 人流数据已更新:', flowData.length);
+      } catch (err) {
+        console.error('[AmapL7Scene] 更新人流数据失败:', err);
+      }
     }
     
     // 更新区域数据
-    if (zoneLayerRef.current && zoneData && zoneData.defenseZones) {
-      const zones = zoneData.defenseZones || zoneData;
-      const geojson = {
-        type: 'FeatureCollection',
-        features: zones.map(zone => ({
-          type: 'Feature',
-          properties: { name: zone.name, height: zone.height, color: zone.color },
-          geometry: { type: 'Polygon', coordinates: [zone.coordinates] }
-        }))
-      };
-      zoneLayerRef.current.setData(geojson);
-      console.log('[AmapL7Scene] 区域数据已更新');
+    if (zoneLayerRef.current && zoneData && zoneData.length > 0) {
+      try {
+        const geojson = {
+          type: 'FeatureCollection',
+          features: zoneData.map(zone => ({
+            type: 'Feature',
+            properties: { name: zone.name, height: zone.height, color: zone.color },
+            geometry: { type: 'Polygon', coordinates: [zone.coordinates] }
+          }))
+        };
+        zoneLayerRef.current.setData(geojson);
+        console.log('[AmapL7Scene] 区域数据已更新:', zoneData.length);
+      } catch (err) {
+        console.error('[AmapL7Scene] 更新区域数据失败:', err);
+      }
     }
     
     // 更新基站数据
     if (stationLayerRef.current && stationData && stationData.length > 0) {
-      const geojson = {
-        type: 'FeatureCollection',
-        features: stationData.map(station => ({
-          type: 'Feature',
-          properties: { ...station },
-          geometry: { type: 'Point', coordinates: [station.lng, station.lat] }
-        }))
-      };
-      stationLayerRef.current.setData(geojson);
-      console.log('[AmapL7Scene] 基站数据已更新');
+      try {
+        const geojson = {
+          type: 'FeatureCollection',
+          features: stationData.map(station => ({
+            type: 'Feature',
+            properties: { ...station },
+            geometry: { type: 'Point', coordinates: [station.lng, station.lat] }
+          }))
+        };
+        stationLayerRef.current.setData(geojson);
+        console.log('[AmapL7Scene] 基站数据已更新:', stationData.length);
+      } catch (err) {
+        console.error('[AmapL7Scene] 更新基站数据失败:', err);
+      }
     }
   }, [sceneLoaded, flowData, zoneData, stationData]);
 
@@ -221,6 +305,9 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00' }) {
           <div className="text-center">
             <Loader2 className="w-10 h-10 text-cyan-400 animate-spin mx-auto mb-3" />
             <div className="text-cyan-400 text-lg">初始化 3D 地图...</div>
+            {!AMAP_KEY && (
+              <div className="text-yellow-400 text-sm mt-2">缺少高德地图 Key 配置</div>
+            )}
           </div>
         </div>
       )}
@@ -228,9 +315,12 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00' }) {
       {/* 错误遮罩 */}
       {error && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#0B1A2A]/90 backdrop-blur-sm">
-          <div className="text-center text-yellow-400">
+          <div className="text-center text-yellow-400 max-w-md px-4">
             <div className="text-xl font-bold mb-2">地图加载失败</div>
             <div className="text-sm text-white/60">{error}</div>
+            <div className="text-xs text-white/40 mt-4">
+              请检查 VITE_AMAP_KEY 和 VITE_AMAP_SECURITY_CODE 配置
+            </div>
           </div>
         </div>
       )}
