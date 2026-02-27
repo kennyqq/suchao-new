@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Radio, Server, Zap, Activity, Car, TrendingUp, Bot } from 'lucide-react';
+import { Radio, Server, Zap, Activity, Car, Signal, Bot } from 'lucide-react';
 
 // 模拟日志数据
 const LOG_DATA = [
@@ -17,8 +17,16 @@ const LOG_DATA = [
   { time: '19:42:42', type: 'warn', content: '元通站流量预警' },
 ];
 
+// PRB 监控数据（热点场景）
+const PRB_DATA = [
+  { label: '元通地铁入口', value: 78, status: 'warning' },
+  { label: '南看台 F区', value: 62, status: 'warning' },
+  { label: '奥体北门检票口', value: 45, status: 'normal' },
+  { label: '内场VIP区', value: 38, status: 'normal' },
+];
+
 export default function LeftPanelP1() {
-  const [logs, setLogs] = useState(LOG_DATA);
+  const [logs] = useState(LOG_DATA);
   const logContainerRef = useRef(null);
   const scrollIntervalRef = useRef(null);
 
@@ -29,12 +37,12 @@ export default function LeftPanelP1() {
 
     let scrollPos = 0;
     scrollIntervalRef.current = setInterval(() => {
-      scrollPos += 0.5; // 每次滚动 0.5px
+      scrollPos += 0.5;
       if (scrollPos >= container.scrollHeight - container.clientHeight) {
-        scrollPos = 0; // 回到顶部循环
+        scrollPos = 0;
       }
       container.scrollTop = scrollPos;
-    }, 50); // 每 50ms 执行一次
+    }, 50);
 
     return () => {
       if (scrollIntervalRef.current) {
@@ -54,8 +62,8 @@ export default function LeftPanelP1() {
   };
 
   return (
-    <div className="w-[320px] h-full flex flex-col gap-3 p-4 z-10 overflow-y-auto">
-      {/* 5G-A 资源与韧性 */}
+    <div className="w-[320px] h-full flex flex-col gap-3 p-4 z-10 overflow-y-auto pb-32">
+      {/* 模块一：5G-A 资源与韧性 */}
       <div className="glass-panel rounded-xl p-4 flex-shrink-0">
         <div className="flex items-center gap-2 mb-3">
           <div className="w-1 h-4 bg-cyan-400 rounded-full" />
@@ -63,7 +71,7 @@ export default function LeftPanelP1() {
         </div>
 
         {/* 资源指标 */}
-        <div className="grid grid-cols-2 gap-3 mb-3">
+        <div className="grid grid-cols-2 gap-3">
           <div className="bg-white/5 rounded-lg p-3 text-center">
             <Radio className="w-5 h-5 mx-auto mb-1 text-cyan-400" />
             <div className="text-xl font-bold text-cyan-400">48</div>
@@ -85,23 +93,36 @@ export default function LeftPanelP1() {
             <div className="text-[10px] text-white/50">应急车</div>
           </div>
         </div>
+      </div>
 
-        {/* PRB 负荷 */}
-        <div className="bg-white/5 rounded-lg p-3 border border-cyan-500/20">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-green-400" />
-              <span className="text-xs text-white/60">PRB 负荷</span>
+      {/* 模块二：PRB 负载监控（从右侧移入，使用热点场景名称） */}
+      <div className="glass-panel rounded-xl p-4 flex-shrink-0">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Signal className="w-4 h-4 text-cyan-400" />
+            <h3 className="text-white text-sm font-bold">PRB 负载监控</h3>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold text-white">56<span className="text-sm">%</span></div>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {PRB_DATA.map((cell) => (
+            <div key={cell.label} className="flex items-center gap-2">
+              <span className="text-white/60 text-xs w-24 truncate">{cell.label}</span>
+              <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full rounded-full ${cell.status === 'warning' ? 'bg-yellow-400' : 'bg-gradient-to-r from-cyan-400 to-green-400'}`}
+                  style={{ width: `${cell.value}%` }}
+                />
+              </div>
+              <span className={`text-xs font-bold w-8 text-right ${cell.status === 'warning' ? 'text-yellow-400' : 'text-white/70'}`}>{cell.value}%</span>
             </div>
-            <span className="text-xl font-bold text-green-400">42%</span>
-          </div>
-          <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-            <div className="h-full w-[42%] bg-gradient-to-r from-cyan-400 to-green-400 rounded-full" />
-          </div>
+          ))}
         </div>
       </div>
 
-      {/* 智能运维终端 */}
+      {/* 模块三：智能运维终端 */}
       <div className="glass-panel rounded-xl p-4 flex-1 flex flex-col min-h-0 flex-shrink-0">
         <div className="flex items-center gap-2 mb-3">
           <Bot className="w-5 h-5 text-cyan-400" />
