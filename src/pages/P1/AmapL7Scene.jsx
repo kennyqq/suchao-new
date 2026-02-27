@@ -106,125 +106,122 @@ if (typeof window !== 'undefined') {
   window._AMapSecurityConfig = { securityJsCode: AMAP_SECURITY_CODE };
 }
 
-// ========== 3D 爆炸图详情面板组件 ==========
-function StationDetail3D({ data, onClose }) {
+// ========== 2D 高级详情面板组件 (DataV 风格) ==========
+function StationDetailPanel2D({ data, onClose }) {
   if (!data) return null;
   
+  // PRB 进度条颜色计算
+  const getPrbColor = (prb) => {
+    if (prb < 50) return 'bg-green-500';
+    if (prb < 80) return 'bg-yellow-500';
+    return 'bg-red-500';
+  };
+  
   return (
-    <div className="absolute top-16 right-4 z-30 w-80 perspective-[1000px]">
-      <div className="glass-panel rounded-xl p-5 border border-cyan-400/40 relative backdrop-blur-xl bg-[#0B1A2A]/90">
-        {/* 关闭按钮 */}
-        <button 
-          onClick={onClose}
-          className="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors z-10"
-        >
-          <X className="w-4 h-4 text-white/70" />
-        </button>
-        
-        {/* 标题区 */}
-        <div className="flex items-center gap-3 mb-4 pr-8">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/30 to-blue-600/30 flex items-center justify-center border border-cyan-400/30">
-            <Radio className="w-5 h-5 text-cyan-400" />
+    <div className="absolute right-6 top-1/2 -translate-y-1/2 z-[200] w-80">
+      <div className="glass-panel rounded-xl p-5 border border-cyan-400/40 backdrop-blur-md bg-[#0B1A2A]/85">
+        {/* 头部：基站名称 + 关闭按钮 */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500/30 to-blue-600/30 flex items-center justify-center border border-cyan-400/30">
+              <Radio className="w-5 h-5 text-cyan-400" />
+            </div>
+            <div>
+              <h3 className="text-white font-bold text-base">{data.name}</h3>
+              <p className="text-cyan-400/70 text-xs font-mono">{data.id}</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-white font-bold text-base">{data.name}</h3>
-            <p className="text-cyan-400/70 text-xs font-mono">{data.id} · 5G-A 宏站</p>
-          </div>
-        </div>
-        
-        {/* 核心指标 */}
-        <div className="grid grid-cols-3 gap-2 mb-5">
-          <div className="bg-white/5 rounded-lg p-2 text-center">
-            <Users className="w-4 h-4 text-blue-400 mx-auto mb-1" />
-            <div className="text-white font-bold text-sm">{data.users?.toLocaleString()}</div>
-            <div className="text-white/40 text-[10px]">连接用户</div>
-          </div>
-          <div className="bg-white/5 rounded-lg p-2 text-center">
-            <Activity className="w-4 h-4 text-yellow-400 mx-auto mb-1" />
-            <div className="text-white font-bold text-sm">{data.prb}%</div>
-            <div className="text-white/40 text-[10px]">PRB利用率</div>
-          </div>
-          <div className="bg-white/5 rounded-lg p-2 text-center">
-            <Zap className="w-4 h-4 text-green-400 mx-auto mb-1" />
-            <div className="text-white font-bold text-sm">{data.bbuLoad}%</div>
-            <div className="text-white/40 text-[10px]">BBU负载</div>
-          </div>
-        </div>
-        
-        {/* 3D 爆炸图核心区域 */}
-        <div className="relative h-56" style={{ perspective: '1000px' }}>
-          <div 
-            className="absolute inset-0 flex flex-col items-center justify-center"
-            style={{ transformStyle: 'preserve-3d', transform: 'rotateX(60deg) translateY(-20px)' }}
+          <button 
+            onClick={onClose}
+            className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
           >
-            {/* 顶层 - AAU 天线层 */}
-            <div 
-              className="absolute w-24 h-24 rounded-2xl bg-gradient-to-b from-green-500/40 to-green-600/20 border-2 border-green-400/50 flex flex-col items-center justify-center shadow-2xl"
-              style={{ 
-                transform: 'translateZ(60px) translateY(-40px)',
-                boxShadow: '0 0 30px rgba(34, 197, 94, 0.4)',
-              }}
-            >
-              <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse mb-1" />
-              <span className="text-green-300 text-[10px] font-bold">AAU 天线层</span>
-              <span className="text-green-400/70 text-[8px]">64T64R 阵列</span>
-            </div>
-            
-            {/* 中层 - 无线智能板/算力层 */}
-            <div 
-              className="absolute w-28 h-28 rounded-2xl bg-gradient-to-b from-yellow-500/40 to-amber-600/20 border-2 border-yellow-400/50 flex flex-col items-center justify-center"
-              style={{ 
-                transform: 'translateZ(30px) translateY(-10px)',
-                boxShadow: data.hasSmartBoard ? '0 0 40px rgba(251, 191, 36, 0.6)' : 'none',
-              }}
-            >
-              <Cpu className="w-6 h-6 text-yellow-400 mb-1" />
-              <span className="text-yellow-300 text-[10px] font-bold">无线智能板</span>
-              {data.hasSmartBoard ? (
-                <span className="text-amber-300 text-[8px] font-bold animate-pulse">5G-A 已激活</span>
-              ) : (
-                <span className="text-white/40 text-[8px]">标准模式</span>
-              )}
-            </div>
-            
-            {/* 底层 - BBU 基带层 */}
-            <div 
-              className="absolute w-32 h-32 rounded-2xl bg-gradient-to-b from-blue-500/40 to-cyan-600/20 border-2 border-cyan-400/50 flex flex-col items-center justify-center"
-              style={{ 
-                transform: 'translateZ(0px) translateY(20px)',
-              }}
-            >
-              <div className="flex items-center gap-1 mb-1">
-                <span className="w-2 h-2 rounded-full bg-cyan-400" />
-                <span className="w-2 h-2 rounded-full bg-cyan-400" />
-                <span className="w-2 h-2 rounded-full bg-cyan-400" />
-              </div>
-              <span className="text-cyan-300 text-[10px] font-bold">BBU 基带层</span>
-              <span className="text-cyan-400/70 text-[8px]">3CC 载波聚合</span>
-              <div className="mt-2 flex gap-1">
-                <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[7px]">n78</span>
-                <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[7px]">n79</span>
-                <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[7px]">n41</span>
+            <X className="w-4 h-4 text-white/70" />
+          </button>
+        </div>
+        
+        {/* 第一部分：基础状态 (Grid 布局) */}
+        <div className="mb-5">
+          <h4 className="text-cyan-400 text-xs font-bold mb-3 uppercase tracking-wider">基础状态</h4>
+          <div className="grid grid-cols-2 gap-3">
+            {/* 经纬度 */}
+            <div className="bg-white/5 rounded-lg p-3">
+              <div className="text-white/40 text-[10px] mb-1">经纬度</div>
+              <div className="text-white font-mono text-xs">
+                {data.lng?.toFixed(4)}, {data.lat?.toFixed(4)}
               </div>
             </div>
             
-            {/* 连接线效果 */}
-            <div className="absolute w-0.5 h-20 bg-gradient-to-b from-green-400/50 via-yellow-400/30 to-transparent" style={{ transform: 'translateZ(45px) translateY(-30px)' }} />
-            <div className="absolute w-0.5 h-16 bg-gradient-to-b from-yellow-400/50 via-cyan-400/30 to-transparent" style={{ transform: 'translateZ(15px) translateY(5px)' }} />
+            {/* 连接用户数 */}
+            <div className="bg-white/5 rounded-lg p-3">
+              <div className="text-white/40 text-[10px] mb-1">连接用户数</div>
+              <div className="text-cyan-400 font-bold text-lg">{data.users?.toLocaleString()}</div>
+            </div>
+            
+            {/* PRB 利用率 - 带进度条 */}
+            <div className="col-span-2 bg-white/5 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-white/40 text-[10px]">PRB 利用率</span>
+                <span className={`font-bold text-sm ${data.prb < 50 ? 'text-green-400' : data.prb < 80 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {data.prb}%
+                </span>
+              </div>
+              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full rounded-full transition-all duration-500 ${getPrbColor(data.prb)}`}
+                  style={{ width: `${data.prb}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* 第二部分：硬件配置 (列表布局) */}
+        <div className="mb-4">
+          <h4 className="text-cyan-400 text-xs font-bold mb-3 uppercase tracking-wider">硬件配置</h4>
+          
+          {/* 基站型号 */}
+          <div className="flex items-center justify-between py-2 border-b border-white/5">
+            <span className="text-white/60 text-xs">基站型号</span>
+            <span className="text-white font-mono text-xs">5G-A Macro 64T64R</span>
+          </div>
+          
+          {/* 载波配置 */}
+          <div className="flex items-center justify-between py-2 border-b border-white/5">
+            <span className="text-white/60 text-xs">载波配置</span>
+            <div className="flex items-center gap-1">
+              <span className="text-cyan-400 text-xs">3CC 载波聚合</span>
+              <span className="text-white/40 text-[10px]">(n28+n78+n79)</span>
+            </div>
+          </div>
+          
+          {/* 无线智能板状态 - 带图标 */}
+          <div className="flex items-center justify-between py-2">
+            <span className="text-white/60 text-xs">无线智能板</span>
+            <div className="flex items-center gap-2">
+              <img 
+                src="/icons/smart-board.svg" 
+                alt="smart-board" 
+                className={`w-5 h-5 ${data.hasSmartBoard ? 'opacity-100' : 'opacity-40 grayscale'}`}
+              />
+              <span className={`text-xs font-bold ${data.hasSmartBoard ? 'text-green-400' : 'text-white/40'}`}>
+                {data.hasSmartBoard ? '已激活' : '未配置'}
+              </span>
+            </div>
           </div>
         </div>
         
         {/* 底部状态栏 */}
-        <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+        <div className="pt-3 border-t border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${data.aauStatus === 'normal' ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`} />
             <span className={`text-xs ${data.aauStatus === 'normal' ? 'text-green-400' : 'text-red-400'}`}>
               AAU {data.aauStatus === 'normal' ? '正常运行' : '告警'}
             </span>
           </div>
-          <span className="text-white/30 text-xs font-mono">
-            {data.lng?.toFixed(4)}, {data.lat?.toFixed(4)}
-          </span>
+          <div className="flex items-center gap-1">
+            <Zap className="w-3 h-3 text-yellow-400" />
+            <span className="text-white/40 text-xs">BBU {data.bbuLoad}%</span>
+          </div>
         </div>
       </div>
     </div>
@@ -616,7 +613,7 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
       )}
       
       {/* 3D 爆炸图详情面板 */}
-      <StationDetail3D data={selectedStation} onClose={() => setSelectedStation(null)} />
+      <StationDetailPanel2D data={selectedStation} onClose={() => setSelectedStation(null)} />
       
       {/* 图例面板 - 已移除 "时空切片" */}
       {sceneLoaded && (
