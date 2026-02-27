@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Trophy, TrendingUp, Target, Activity, Bot, Shield, Zap, FileText, Download, RefreshCw, ChevronRight } from 'lucide-react';
+import { Trophy, TrendingUp, Target, Activity, Bot, Shield, Zap, FileText, Download, RefreshCw, ChevronRight, Loader2 } from 'lucide-react';
 import { fetchEvaluationReport } from '../../api/dashboard.js';
 
 // 默认战报数据
@@ -34,15 +34,29 @@ const DEFAULT_REPORT = {
 };
 
 export default function EvaluationView() {
-  const [reportData, setReportData] = useState(DEFAULT_REPORT);
+  const [reportData, setReportData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const loadData = async () => {
       try {
+        setLoading(true);
         const data = await fetchEvaluationReport();
-        if (data) setReportData(data);
+        // 数据格式防御：确保数据有效
+        if (data && typeof data === 'object') {
+          setReportData(data);
+        } else {
+          console.warn('[EvaluationView] API 返回无效数据，使用默认值');
+          setReportData(DEFAULT_REPORT);
+        }
       } catch (err) {
-        console.error('Failed to load evaluation data:', err);
+        console.error('[EvaluationView] 加载数据失败:', err);
+        setError(err.message);
+        // 使用默认数据作为 fallback
+        setReportData(DEFAULT_REPORT);
+      } finally {
+        setLoading(false);
       }
     };
     loadData();
@@ -50,13 +64,43 @@ export default function EvaluationView() {
 
   const formatNumber = (num) => new Intl.NumberFormat('zh-CN').format(num || 0);
 
-  // 安全获取数据
+  // ========== Loading 拦截器（最关键）==========
+  if (loading) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-cyan-400">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4" />
+          <div className="text-lg font-medium">数据加载中...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ========== 数据不存在时的保护 ==========
+  if (!reportData) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-yellow-400">
+        <div className="text-center">
+          <div className="text-lg font-medium mb-2">数据加载失败</div>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-cyan-500/20 text-cyan-400 rounded border border-cyan-500/50 hover:bg-cyan-500/30 transition-colors"
+          >
+            刷新重试
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ========== 安全获取数据（带可选链和默认值）==========
   const match = reportData?.match || DEFAULT_REPORT.match;
   const coreMetrics = reportData?.coreMetrics || DEFAULT_REPORT.coreMetrics;
   const vipMetrics = reportData?.vipMetrics || DEFAULT_REPORT.vipMetrics;
   const uplinkTrend = reportData?.uplinkTrend || DEFAULT_REPORT.uplinkTrend;
   const agentContributions = reportData?.agentContributions || DEFAULT_REPORT.agentContributions;
   const suggestions = reportData?.suggestions || DEFAULT_REPORT.suggestions;
+  const assuranceLevel = reportData?.assuranceLevel || 'S';
 
   return (
     <div className="h-full flex flex-col gap-4 p-4 overflow-y-auto">
@@ -68,12 +112,14 @@ export default function EvaluationView() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-              {match.home} {match.score} {match.away}
-              <span className="text-lg text-white/60 font-normal">{match.date}</span>
+              {match?.home || '南京'} {match?.score || '2:1'} {match?.away || '常州'}
+              <span className="text-lg text-white/60 font-normal">{match?.date || '5月2日'}</span>
             </h1>
             <div className="flex items-center gap-2 text-sm text-white/60">
-              <span>{match.venue}</span>
-              <span className="px-2 py-0.5 bg-cyan-500/20 rounded text-cyan-400 text-xs font-medium">{reportData.assuranceLevel || 'S'} 级保障</span>
+              <span>{match?.venue || '南京奥体中心'}</span>
+              <span className="px-2 py-0.5 bg-cyan-500/20 rounded text-cyan-400 text-xs font-medium">
+                {assuranceLevel} 级保障
+              </span>
             </div>
           </div>
         </div>
@@ -95,11 +141,11 @@ export default function EvaluationView() {
             <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
               <TrendingUp className="w-5 h-5 text-cyan-400" />
             </div>
-            <span className="text-white/60 text-sm">奥体球迷峰值</span>
+            <span className="text-white/60 text-sm">{coreMetrics?.peakAttendance?.label || '奥体球迷峰值'}</span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-bold text-white">{formatNumber(coreMetrics.peakAttendance?.value)}</span>
-            <span className="text-white/50 text-lg">{coreMetrics.peakAttendance?.unit}</span>
+            <span className="text-4xl font-bold text-white">{formatNumber(coreMetrics?.peakAttendance?.value)}</span>
+            <span className="text-white/50 text-lg">{coreMetrics?.peakAttendance?.unit || '人'}</span>
           </div>
         </div>
 
@@ -108,11 +154,11 @@ export default function EvaluationView() {
             <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
               <Target className="w-5 h-5 text-green-400" />
             </div>
-            <span className="text-white/60 text-sm">峰值话务量</span>
+            <span className="text-white/60 text-sm">{coreMetrics?.peakTraffic?.label || '峰值话务量'}</span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-bold text-white">{coreMetrics.peakTraffic?.value}</span>
-            <span className="text-white/50 text-lg">{coreMetrics.peakTraffic?.unit}</span>
+            <span className="text-4xl font-bold text-white">{coreMetrics?.peakTraffic?.value || '15.8'}</span>
+            <span className="text-white/50 text-lg">{coreMetrics?.peakTraffic?.unit || 'TB'}</span>
           </div>
         </div>
 
@@ -121,11 +167,11 @@ export default function EvaluationView() {
             <div className="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
               <Activity className="w-5 h-5 text-yellow-400" />
             </div>
-            <span className="text-white/60 text-sm">5G-A 场馆包</span>
+            <span className="text-white/60 text-sm">{coreMetrics?.packages5GA?.label || '5G-A 场馆包'}</span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-bold text-white">{formatNumber(coreMetrics.packages5GA?.value)}</span>
-            <span className="text-white/50 text-lg">{coreMetrics.packages5GA?.unit}</span>
+            <span className="text-4xl font-bold text-white">{formatNumber(coreMetrics?.packages5GA?.value)}</span>
+            <span className="text-white/50 text-lg">{coreMetrics?.packages5GA?.unit || '份'}</span>
           </div>
         </div>
       </div>
@@ -171,21 +217,21 @@ export default function EvaluationView() {
           </div>
           
           <div className="space-y-3 flex-1 overflow-y-auto">
-            {agentContributions.map((item, index) => (
+            {(agentContributions || []).map((item, index) => (
               <div
                 key={index}
                 className="flex items-center gap-4 p-4 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
               >
                 <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
-                  <item.icon className="w-5 h-5 text-cyan-400" />
+                  {item?.icon && <item.icon className="w-5 h-5 text-cyan-400" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-white font-medium mb-1">{item.label}</div>
-                  <div className="text-white/50 text-sm">{item.desc}</div>
+                  <div className="text-white font-medium mb-1">{item?.label || '-'}</div>
+                  <div className="text-white/50 text-sm">{item?.desc || '-'}</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-green-400 font-bold text-xl">{item.value}</div>
-                  <div className="text-white/40 text-xs">{item.trend}</div>
+                  <div className="text-green-400 font-bold text-xl">{item?.value || '-'}</div>
+                  <div className="text-white/40 text-xs">{item?.trend || ''}</div>
                 </div>
               </div>
             ))}
@@ -202,17 +248,17 @@ export default function EvaluationView() {
             <div className="ml-auto text-cyan-400 font-bold text-xl">峰值 4.2x</div>
           </div>
           
-          <div className="flex-1 flex items-end gap-1">
-            {uplinkTrend.map((item, index) => {
-              const height = (item.value / 4.5) * 100;
+          <div className="flex-1 flex items-end gap-1 min-h-[150px]">
+            {(uplinkTrend || []).map((item, index) => {
+              const height = ((item?.value || 0) / 4.5) * 100;
               return (
                 <div key={index} className="flex-1 flex flex-col items-center">
                   <div
-                    className={`w-full rounded-t ${item.isPeak ? 'bg-yellow-400' : 'bg-cyan-400/60'}`}
-                    style={{ height: `${height}%`, minHeight: '4px' }}
+                    className={`w-full rounded-t ${item?.isPeak ? 'bg-yellow-400' : 'bg-cyan-400/60'}`}
+                    style={{ height: `${Math.max(height, 4)}%`, minHeight: '4px' }}
                   />
                   {index % 2 === 0 && (
-                    <div className="text-[10px] text-white/40 mt-1">{item.time}</div>
+                    <div className="text-[10px] text-white/40 mt-1">{item?.time || ''}</div>
                   )}
                 </div>
               );
@@ -231,23 +277,23 @@ export default function EvaluationView() {
         </div>
         
         <div className="grid grid-cols-3 gap-4">
-          {suggestions.map((item) => (
+          {(suggestions || []).map((item) => (
             <div
-              key={item.id}
+              key={item?.id || Math.random()}
               className="p-4 rounded-lg bg-white/5 border border-white/10 cursor-pointer hover:bg-white/10 transition-colors"
             >
               <div className="flex items-center justify-between mb-2">
                 <span className={`px-2 py-0.5 rounded text-xs ${
-                  item.priority === 'high' ? 'bg-red-500/20 text-red-400' :
-                  item.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                  item?.priority === 'high' ? 'bg-red-500/20 text-red-400' :
+                  item?.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
                   'bg-cyan-500/20 text-cyan-400'
                 }`}>
-                  {item.priority === 'high' ? '高' : item.priority === 'medium' ? '中' : '低'}优先级
+                  {item?.priority === 'high' ? '高' : item?.priority === 'medium' ? '中' : '低'}优先级
                 </span>
                 <ChevronRight className="w-4 h-4 text-white/30" />
               </div>
-              <div className="text-white font-medium mb-1">{item.title}</div>
-              <div className="text-white/50 text-sm">{item.desc}</div>
+              <div className="text-white font-medium mb-1">{item?.title || '-'}</div>
+              <div className="text-white/50 text-sm">{item?.desc || '-'}</div>
             </div>
           ))}
         </div>
