@@ -24,17 +24,16 @@ const EMERGENCY_VEHICLES = [
   { id: 'EV-002', name: '应急通信车-西', lng: 118.7180, lat: 32.0100, status: 'active' },
 ];
 
-// ========== Mock 48个基站坐标 ==========
+// ========== Mock 48个基站坐标 (严格约束在奥体周边 ±0.005) ==========
 function generateBaseStations() {
   const stations = [];
   const centerLng = 118.7265;
   const centerLat = 32.0087;
   
   for (let i = 0; i < 48; i++) {
-    const angle = (i / 48) * Math.PI * 2;
-    const radius = 0.003 + Math.random() * 0.005;
-    const lng = centerLng + Math.cos(angle) * radius;
-    const lat = centerLat + Math.sin(angle) * radius;
+    // 严格约束偏移量在 ±0.005 经纬度内
+    const lng = centerLng + (Math.random() - 0.5) * 0.01;
+    const lat = centerLat + (Math.random() - 0.5) * 0.01;
     
     stations.push({
       id: `BS-${String(i + 1).padStart(3, '0')}`,
@@ -50,26 +49,27 @@ function generateBaseStations() {
   return stations;
 }
 
-// ========== 地面保障人员 ==========
+// ========== 地面保障人员 (严格约束在奥体周边 ±0.005) ==========
 function generateGroundStaff() {
   const staff = [];
   const centerLng = 118.7265;
   const centerLat = 32.0087;
   
   for (let i = 0; i < 20; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const radius = 0.002 + Math.random() * 0.006;
+    // 严格约束偏移量在 ±0.005 经纬度内
+    const lng = centerLng + (Math.random() - 0.5) * 0.01;
+    const lat = centerLat + (Math.random() - 0.5) * 0.01;
     staff.push({
       id: `STAFF-${i + 1}`,
-      lng: centerLng + Math.cos(angle) * radius,
-      lat: centerLat + Math.sin(angle) * radius,
+      lng,
+      lat,
       role: i < 5 ? '工程师' : '巡检员',
     });
   }
   return staff;
 }
 
-// ========== 生成人流数据(根据时间) ==========
+// ========== 生成人流数据 (严格约束在奥体周边 ±0.005) ==========
 function generateCrowdData(currentTime) {
   const hour = parseInt(currentTime?.split(':')[0] || '20');
   const isPeak = hour >= 19 && hour <= 21;
@@ -80,16 +80,17 @@ function generateCrowdData(currentTime) {
   const centerLat = 32.0087;
   
   for (let i = 0; i < 30; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const radius = 0.001 + Math.random() * 0.008;
+    // 严格约束偏移量在 ±0.005 经纬度内
+    const lng = centerLng + (Math.random() - 0.5) * 0.01;
+    const lat = centerLat + (Math.random() - 0.5) * 0.01;
     const count = Math.floor((Math.random() * 500 + 100) * baseMultiplier);
     
     crowdPoints.push({
       id: `CROWD-${i}`,
-      lng: centerLng + Math.cos(angle) * radius,
-      lat: centerLat + Math.sin(angle) * radius,
+      lng,
+      lat,
       count,
-      isAlert: count > 1500,
+      isAlert: count > 800, // 调整告警阈值为800人
     });
   }
   return crowdPoints;
@@ -314,23 +315,30 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
             scene.addLayer(staffLayer);
             layersRef.current.staff = staffLayer;
 
-            // 7. 人流热力图层
+            // 7. 人流热力图层 - 修复 Cylinder 尺寸映射
             const crowdLayer = new PointLayer({ zIndex: 5 })
               .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
               .shape('cylinder')
-              .size('count', [10, 1000])
-              .color('count', ['#34d399', '#fbbf24', '#ef4444'])
-              .style({ opacity: 0.7 });
+              // size 传入回调函数：固定半径为 5(米) 左右，高度根据 count 计算
+              .size('count', (count) => {
+                return [5, 5, Math.min(count / 10, 100)]; // [底面半径, 顶面半径, 高度]，限制最大高度100
+              })
+              .color('count', (count) => {
+                if (count > 800) return '#ef4444'; // 红色告警
+                if (count > 500) return '#fbbf24'; // 黄色预警
+                return '#34d399'; // 绿色正常
+              })
+              .style({ opacity: 0.8 });
             scene.addLayer(crowdLayer);
             layersRef.current.crowd = crowdLayer;
 
-            // 8. 告警呼吸灯图层
+            // 8. 告警呼吸灯图层 - 固定合理尺寸
             const alertLayer = new PointLayer({ zIndex: 9 })
               .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
               .shape('circle')
               .color('#ef4444')
-              .size(30)
-              .animate({ enable: true, speed: 0.5, rings: 3 })
+              .size(25) // 固定一个合理的像素大小
+              .animate({ enable: true, speed: 1, rings: 3 })
               .style({ opacity: 0.8 });
             scene.addLayer(alertLayer);
             layersRef.current.alert = alertLayer;
