@@ -332,20 +332,20 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
               scene.addImage('smart-board', '/icons/smart-board.svg'),
             ]).catch(() => console.warn('[AmapL7Scene] 部分图标加载失败'));
 
-            // 1. 3D 热力图层 (Cyberpunk 风格能量场)
+            // 1. 2D 热力图层 (贴地模式，修复撕裂问题)
             const heatmapLayer = new HeatmapLayer({ zIndex: 1 })
               .source(crowdHeatData, {
                 parser: { type: 'json', x: 'lng', y: 'lat' },
               })
-              .shape('heatmap3D') // 使用 3D 热力起伏效果
-              .size('count', [0, 1]) // 权重映射
+              .shape('heatmap') // 【关键】使用贴地 2D 热力图，避免 3D 撕裂
+              .size('count', [0, 1])
               .style({
-                intensity: 3, // 热力强度
-                radius: 25,   // 热力点扩散半径
+                intensity: 2, // 稍微降低强度
+                radius: 30,   // 加大扩散半径，让热力融合更自然
                 opacity: 0.8,
                 rampColors: {
                   colors: [
-                    'rgba(11, 26, 42, 0)', // 0% 透明深蓝底色
+                    'rgba(11, 26, 42, 0)', // 0% 透明
                     '#0891b2',             // 20% 赛博青
                     '#10b981',             // 40% 翠绿
                     '#fbbf24',             // 70% 警告黄
@@ -399,7 +399,7 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
             scene.addLayer(vehicleLayer);
             layersRef.current.vehicle = vehicleLayer;
 
-            // 5. 基站图层 - 使用三扇区图标 (暂时用 circle 作为 fallback)
+            // 5. 基站图层 - 强制使用 sector-site 图标
             const stationLayer = new PointLayer({ zIndex: 6 })
               .source({
                 type: 'FeatureCollection',
@@ -409,9 +409,9 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
                   geometry: { type: 'Point', coordinates: [s.lng, s.lat] }
                 }))
               }, { parser: { type: 'geojson' } })
-              .shape(s => s.hasSmartBoard ? 'triangle' : 'circle') // 智能板用三角形，普通用圆形
-              .color(s => s.hasSmartBoard ? '#fbbf24' : '#00F0FF')
-              .size(30); // 放大尺寸
+              .shape('sector-site') // 全部使用三扇区图标，不区分条件
+              .size(30)
+              .style({ opacity: 1 });
             scene.addLayer(stationLayer);
             layersRef.current.station = stationLayer;
 
