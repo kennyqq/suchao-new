@@ -35,7 +35,6 @@ function cleanFlowData(data) {
   if (!Array.isArray(data)) return [];
   return data.filter(item => {
     if (!item.path || !Array.isArray(item.path)) return false;
-    // 检查路径中所有坐标是否合法
     return item.path.every(coord => 
       Array.isArray(coord) && 
       coord.length >= 2 &&
@@ -52,7 +51,6 @@ function cleanZoneData(data) {
   
   return zones.filter(zone => {
     if (!zone.coordinates || !Array.isArray(zone.coordinates)) return false;
-    // 检查多边形坐标是否合法
     return zone.coordinates.every(ring => 
       Array.isArray(ring) && ring.every(coord =>
         Array.isArray(coord) &&
@@ -82,117 +80,117 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00' }) {
 
   // ========== 第一步：初始化地图和空图层（只执行一次） ==========
   useEffect(() => {
-    let isMounted = true;
-    let scene = null;
+    // 【拦截器】防止 React 18 严格模式下的二次实例化
+    if (sceneRef.current) {
+      console.log('[AmapL7Scene] 场景已存在，跳过二次初始化');
+      return;
+    }
 
-    const initMap = async () => {
-      try {
-        if (!containerRef.current) {
-          setTimeout(initMap, 100);
-          return;
-        }
+    // 确保地图挂载容器在 DOM 中确切存在
+    const container = containerRef.current;
+    if (!container) {
+      console.error('[AmapL7Scene] 找不到地图容器');
+      setError('地图容器未找到');
+      setLoading(false);
+      return;
+    }
 
-        if (!AMAP_KEY) {
-          throw new Error('高德 Key 未配置 (VITE_AMAP_KEY)');
-        }
+    if (!AMAP_KEY) {
+      setError('高德 Key 未配置 (VITE_AMAP_KEY)');
+      setLoading(false);
+      return;
+    }
 
-        // 创建场景 - 传入正确的 token
-        scene = new Scene({
-          id: containerRef.current,
-          map: new GaodeMap({
-            pitch: 55,
-            zoom: 15,
-            center: CENTER_COORDINATES,
-            viewMode: '3D',
-            style: 'amap://styles/darkblue',
-            token: AMAP_KEY, // <-- 关键：传入正确的 Key
-          }),
-        });
+    try {
+      // 创建场景 - 传入正确的 token
+      const scene = new Scene({
+        id: container,
+        map: new GaodeMap({
+          pitch: 55,
+          zoom: 15,
+          center: CENTER_COORDINATES,
+          viewMode: '3D',
+          style: 'amap://styles/darkblue',
+          token: AMAP_KEY,
+        }),
+        logoVisible: false,
+      });
 
-        scene.setBgColor('#0B1A2A');
-        sceneRef.current = scene;
+      scene.setBgColor('#0B1A2A');
+      
+      // 立即上锁
+      sceneRef.current = scene;
 
-        // 等待场景加载
-        scene.on('loaded', () => {
-          if (!isMounted) return;
+      // 等待场景加载
+      scene.on('loaded', () => {
+        console.log('[AmapL7Scene] 地图加载成功');
+        
+        try {
+          // 1. 人流动线图层
+          const flowLayer = new LineLayer({ zIndex: 1 })
+            .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
+            .size(2)
+            .shape('line')
+            .color('#00f0ff')
+            .animate({ enable: true, interval: 0.1, trailLength: 0.5, duration: 2 })
+            .style({ opacity: 0.8 });
+          scene.addLayer(flowLayer);
+          flowLayerRef.current = flowLayer;
+
+          // 2. 监控区域图层
+          const zoneLayer = new PolygonLayer({ zIndex: 2 })
+            .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
+            .color('rgba(0, 240, 255, 0.3)')
+            .shape('extrude')
+            .size(50)
+            .style({ opacity: 0.6 });
+          scene.addLayer(zoneLayer);
+          zoneLayerRef.current = zoneLayer;
+
+          // 3. 基站点位图层
+          const stationLayer = new PointLayer({ zIndex: 3 })
+            .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
+            .shape('circle')
+            .color('#00F0FF')
+            .size(20)
+            .style({ opacity: 0.8 })
+            .animate({ enable: true, speed: 0.02, rings: 2 });
+          scene.addLayer(stationLayer);
+          stationLayerRef.current = stationLayer;
           
-          try {
-            // 初始化空图层（必须给默认空数据）
-            
-            // 1. 人流动线图层
-            const flowLayer = new LineLayer({ zIndex: 1 })
-              .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
-              .size(2)
-              .shape('line')
-              .color('#00f0ff')
-              .animate({ enable: true, interval: 0.1, trailLength: 0.5, duration: 2 })
-              .style({ opacity: 0.8 });
-            scene.addLayer(flowLayer);
-            flowLayerRef.current = flowLayer;
-
-            // 2. 监控区域图层
-            const zoneLayer = new PolygonLayer({ zIndex: 2 })
-              .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
-              .color('rgba(0, 240, 255, 0.3)')
-              .shape('extrude')
-              .size(50)
-              .style({ opacity: 0.6 });
-            scene.addLayer(zoneLayer);
-            zoneLayerRef.current = zoneLayer;
-
-            // 3. 基站点位图层
-            const stationLayer = new PointLayer({ zIndex: 3 })
-              .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
-              .shape('circle')
-              .color('#00F0FF')
-              .size(20)
-              .style({ opacity: 0.8 })
-              .animate({ enable: true, speed: 0.02, rings: 2 });
-            scene.addLayer(stationLayer);
-            stationLayerRef.current = stationLayer;
-            
-            // 点击事件
-            stationLayer.on('click', (e) => {
-              if (e.feature && onStationClick) {
-                onStationClick(e.feature.properties);
-              }
-            });
-
-            setSceneLoaded(true);
-            setLoading(false);
-            console.log('[AmapL7Scene] 地图和空图层初始化完成');
-          } catch (layerErr) {
-            console.error('[AmapL7Scene] 图层初始化错误:', layerErr);
-            if (isMounted) {
-              setError('图层初始化失败: ' + layerErr.message);
-              setLoading(false);
+          // 点击事件
+          stationLayer.on('click', (e) => {
+            if (e.feature && onStationClick) {
+              onStationClick(e.feature.properties);
             }
-          }
-        });
+          });
 
-        scene.on('error', (err) => {
-          console.error('[AmapL7Scene] 场景错误:', err);
-          if (isMounted) {
-            setError('地图渲染失败: ' + (err.message || '未知错误'));
-            setLoading(false);
-          }
-        });
-
-      } catch (err) {
-        console.error('[AmapL7Scene] 初始化错误:', err);
-        if (isMounted) {
-          setError(err.message || '地图初始化失败');
+          setSceneLoaded(true);
+          setLoading(false);
+          console.log('[AmapL7Scene] 地图和空图层初始化完成');
+        } catch (layerErr) {
+          console.error('[AmapL7Scene] 图层初始化错误:', layerErr);
+          setError('图层初始化失败: ' + layerErr.message);
           setLoading(false);
         }
-      }
-    };
+      });
 
-    initMap();
+      scene.on('error', (err) => {
+        console.error('[AmapL7Scene] 场景错误:', err);
+        setError('地图渲染失败: ' + (err.message || '未知错误'));
+        setLoading(false);
+      });
 
-    // 清理函数 - 确保组件卸载时销毁场景
+    } catch (err) {
+      console.error('[AmapL7Scene] 初始化严重异常:', err);
+      setError(err.message || '地图初始化失败');
+      setLoading(false);
+    }
+
+    // 【最重要】组件卸载时安全销毁地图引擎，释放 WebGL 上下文
     return () => {
-      isMounted = false;
       if (sceneRef.current) {
+        console.log('[AmapL7Scene] 销毁地图实例');
         try {
           sceneRef.current.destroy();
         } catch (e) {
@@ -237,7 +235,8 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00' }) {
 
   // ========== 第三步：更新图层数据（当 sceneLoaded 和数据都准备好时） ==========
   useEffect(() => {
-    if (!sceneLoaded) return;
+    // 确保场景已加载且实例存在
+    if (!sceneLoaded || !sceneRef.current) return;
     
     // 更新人流数据
     if (flowLayerRef.current && flowData && flowData.length > 0) {
@@ -275,19 +274,20 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00' }) {
       }
     }
     
-    // 更新基站数据
+    // 更新基站数据 - 过滤异常经纬度数据，防止 NaN 崩溃
     if (stationLayerRef.current && stationData && stationData.length > 0) {
       try {
+        const validStations = stationData.filter(s => s.lng && s.lat && !isNaN(s.lng) && !isNaN(s.lat));
         const geojson = {
           type: 'FeatureCollection',
-          features: stationData.map(station => ({
+          features: validStations.map(station => ({
             type: 'Feature',
             properties: { ...station },
             geometry: { type: 'Point', coordinates: [station.lng, station.lat] }
           }))
         };
         stationLayerRef.current.setData(geojson);
-        console.log('[AmapL7Scene] 基站数据已更新:', stationData.length);
+        console.log('[AmapL7Scene] 基站数据已更新:', validStations.length);
       } catch (err) {
         console.error('[AmapL7Scene] 更新基站数据失败:', err);
       }
