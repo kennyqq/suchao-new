@@ -10,9 +10,14 @@ export default function GlobalDefense() {
   const [selectedStation, setSelectedStation] = useState(null);
   const [currentTime, setCurrentTime] = useState('20:00'); // 全局时间状态
   const [selectedMetric, setSelectedMetric] = useState('crowd');
+  const [mapAlerts, setMapAlerts] = useState([]); // 地图人流告警
 
   const handleStationClick = (station) => {
     setSelectedStation(station);
+  };
+
+  const handleAlertsChange = (alerts) => {
+    setMapAlerts(alerts);
   };
 
   const handleCloseModal = () => {
@@ -83,12 +88,13 @@ export default function GlobalDefense() {
               <AmapL7Scene 
                 onStationClick={handleStationClick}
                 currentTime={currentTime}
+                onAlertsChange={handleAlertsChange}
               />
             </div>
           </motion.div>
 
           {/* 右侧 - 业务质量洞察 */}
-          <RightPanelP1 currentTime={currentTime} />
+          <RightPanelP1 currentTime={currentTime} mapAlerts={mapAlerts} />
         </div>
       </div>
 

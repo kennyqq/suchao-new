@@ -105,8 +105,11 @@ function MiniTrendChart({ data, color = '#00F0FF' }) {
   );
 }
 
-export default function RightPanelP1() {
-  const [alarms] = useState(DEFAULT_ALARMS);
+export default function RightPanelP1({ mapAlerts = [] }) {
+  // 合并默认告警和地图人流告警
+  const [staticAlarms] = useState(DEFAULT_ALARMS);
+  const allAlarms = [...mapAlerts, ...staticAlarms];
+  const highPriorityCount = allAlarms.filter(a => a.level === 'high').length;
 
   return (
     <div className="w-[320px] h-full flex flex-col gap-3 p-4 z-10 overflow-y-auto pb-32">
@@ -140,13 +143,15 @@ export default function RightPanelP1() {
           <AlertTriangle className="w-4 h-4 text-red-400" />
           <h2 className="text-white text-sm font-bold">智能体告警监测</h2>
           <div className="ml-auto flex items-center gap-2">
-            <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs rounded-full font-medium">2 高优</span>
-            <span className="text-cyan-400 text-xs font-bold">{alarms.length}</span>
+            {highPriorityCount > 0 && (
+              <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs rounded-full font-medium">{highPriorityCount} 高优</span>
+            )}
+            <span className="text-cyan-400 text-xs font-bold">{allAlarms.length}</span>
           </div>
         </div>
         
         <div className="overflow-y-auto flex-1 min-h-0 pr-1">
-          {alarms.map((alarm) => (
+          {allAlarms.map((alarm) => (
             <AlarmCard key={alarm.id} alarm={alarm} />
           ))}
         </div>
