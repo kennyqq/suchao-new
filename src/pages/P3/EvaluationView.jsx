@@ -8,6 +8,85 @@ import AgentContribution from './components/AgentContribution';
 import CyberBorder from '../../components/CyberBorder';
 import useDashboardStore from '../../store/useDashboardStore';
 
+// VIP赛后关怀手机弹窗组件（移到外部避免重复创建）
+function VIPCareNotification() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.3 }}
+      className="relative mx-auto w-full max-w-[220px]"
+    >
+      {/* 手机外框 */}
+      <div className="bg-gray-800 rounded-[20px] p-1.5 border border-gray-600 shadow-2xl">
+        {/* 手机屏幕 */}
+        <div className="bg-gradient-to-b from-slate-900 to-slate-800 rounded-[14px] p-2.5 relative overflow-hidden">
+          {/* 状态栏 */}
+          <div className="flex items-center justify-between mb-2 text-[9px]">
+            <span className="text-white/80">22:30</span>
+            <div className="flex items-center gap-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+              <span className="text-white/60">5G-A</span>
+              <span className="text-white/60">85%</span>
+            </div>
+          </div>
+
+          {/* 通知卡片 */}
+          <motion.div
+            initial={{ x: -20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ delay: 0.5, type: 'spring' }}
+            className="bg-gradient-to-br from-indigo-900/60 to-purple-900/40 rounded-lg p-2.5 border border-white/10"
+          >
+            {/* 应用图标和标题 */}
+            <div className="flex items-start gap-2 mb-1.5">
+              <div className="w-7 h-7 rounded-md bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                <Smartphone className="w-3.5 h-3.5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1 mb-0.5">
+                  <span className="text-white/90 text-[10px] font-medium">江苏移动</span>
+                  <span className="text-white/40 text-[8px]">测试</span>
+                </div>
+                <div className="text-white text-[11px] font-semibold leading-tight">
+                  尊贵的钻白卡用户
+                </div>
+              </div>
+            </div>
+            
+            {/* 主体描述 */}
+            <div className="text-white/70 text-[9px] leading-relaxed mb-2">
+              昨晚智能体为您的 <span className="text-cyan-400 font-medium">微信视频/直播</span> 业务进行了专属加速 🚀
+            </div>
+            
+            {/* 高亮金句 */}
+            <div className="inline-flex items-center gap-1 bg-yellow-500/15 rounded px-1.5 py-0.5 border border-yellow-500/20">
+              <Sparkles className="w-2.5 h-2.5 text-yellow-400" />
+              <span className="text-yellow-400 text-[8px] font-medium">
+                您的体验超越了现场 <span className="text-yellow-300 font-bold">99%</span> 的用户
+              </span>
+            </div>
+
+            {/* 底部交互 */}
+            <div className="flex items-center justify-end mt-2 pt-1.5 border-t border-white/5">
+              <button className="flex items-center gap-0.5 text-cyan-400 text-[9px] hover:text-cyan-300 transition-colors">
+                查看详情
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+          </motion.div>
+
+          {/* 底部 home indicator */}
+          <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-12 h-0.5 bg-white/20 rounded-full" />
+        </div>
+      </div>
+
+      {/* 装饰光效 */}
+      <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400/40 rounded-full blur-sm" />
+    </motion.div>
+  );
+}
+
 export default function EvaluationView() {
   const [showReport, setShowReport] = useState(true);
   const { p3Data, loading, fetchP3Data } = useDashboardStore();
@@ -52,85 +131,6 @@ export default function EvaluationView() {
     { num: '2', title: 'VIP专席保障优化', desc: '下一场提前15分钟预激活' },
     { num: '3', title: '上行干扰排查', desc: '西区存在外部干扰源' },
   ];
-
-  // VIP赛后关怀手机弹窗组件
-  function VIPCareNotification() {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="relative mx-auto w-full max-w-[220px]"
-      >
-        {/* 手机外框 */}
-        <div className="bg-gray-800 rounded-[20px] p-1.5 border border-gray-600 shadow-2xl">
-          {/* 手机屏幕 */}
-          <div className="bg-gradient-to-b from-slate-900 to-slate-800 rounded-[14px] p-2.5 relative overflow-hidden">
-            {/* 状态栏 */}
-            <div className="flex items-center justify-between mb-2 text-[9px]">
-              <span className="text-white/80">22:30</span>
-              <div className="flex items-center gap-1">
-                <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                <span className="text-white/60">5G-A</span>
-                <span className="text-white/60">85%</span>
-              </div>
-            </div>
-
-            {/* 通知卡片 */}
-            <motion.div
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: 0.5, type: 'spring' }}
-              className="bg-gradient-to-br from-indigo-900/60 to-purple-900/40 rounded-lg p-2.5 border border-white/10"
-            >
-              {/* 应用图标和标题 */}
-              <div className="flex items-start gap-2 mb-1.5">
-                <div className="w-7 h-7 rounded-md bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
-                  <Smartphone className="w-3.5 h-3.5 text-white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1 mb-0.5">
-                    <span className="text-white/90 text-[10px] font-medium">江苏移动</span>
-                    <span className="text-white/40 text-[8px]">测试</span>
-                  </div>
-                  <div className="text-white text-[11px] font-semibold leading-tight">
-                    尊贵的钻白卡用户
-                  </div>
-                </div>
-              </div>
-              
-              {/* 主体描述 */}
-              <div className="text-white/70 text-[9px] leading-relaxed mb-2">
-                昨晚智能体为您的 <span className="text-cyan-400 font-medium">微信视频/直播</span> 业务进行了专属加速 🚀
-              </div>
-              
-              {/* 高亮金句 */}
-              <div className="inline-flex items-center gap-1 bg-yellow-500/15 rounded px-1.5 py-0.5 border border-yellow-500/20">
-                <Sparkles className="w-2.5 h-2.5 text-yellow-400" />
-                <span className="text-yellow-400 text-[8px] font-medium">
-                  您的体验超越了现场 <span className="text-yellow-300 font-bold">99%</span> 的用户
-                </span>
-              </div>
-
-              {/* 底部交互 */}
-              <div className="flex items-center justify-end mt-2 pt-1.5 border-t border-white/5">
-                <button className="flex items-center gap-0.5 text-cyan-400 text-[9px] hover:text-cyan-300 transition-colors">
-                  查看详情
-                  <ChevronRight className="w-3 h-3" />
-                </button>
-              </div>
-            </motion.div>
-
-            {/* 底部 home indicator */}
-            <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-12 h-0.5 bg-white/20 rounded-full" />
-          </div>
-        </div>
-
-        {/* 装饰光效 */}
-        <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400/40 rounded-full blur-sm" />
-      </motion.div>
-    );
-  }
 
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col bg-cyber-bg">
