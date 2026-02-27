@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2, MapPin, X, Activity, Zap, Cpu } from 'lucide-react';
 import { Scene, GaodeMap, PointLayer, LineLayer, PolygonLayer } from '@antv/l7';
-import { fetchFlowData, fetchZoneData, fetchBaseStations } from '../../api/dashboard.js';
+import { fetchFlowData, fetchZoneData } from '../../api/dashboard.js';
 
 const AMAP_KEY = import.meta.env.VITE_AMAP_KEY || '';
 const AMAP_SECURITY_CODE = import.meta.env.VITE_AMAP_SECURITY_CODE || '';
@@ -30,10 +30,9 @@ function generateBaseStations() {
   const centerLng = 118.7265;
   const centerLat = 32.0087;
   
-  // 围绕奥体中心生成48个基站
   for (let i = 0; i < 48; i++) {
     const angle = (i / 48) * Math.PI * 2;
-    const radius = 0.003 + Math.random() * 0.005; // 半径随机
+    const radius = 0.003 + Math.random() * 0.005;
     const lng = centerLng + Math.cos(angle) * radius;
     const lat = centerLat + Math.sin(angle) * radius;
     
@@ -42,9 +41,9 @@ function generateBaseStations() {
       name: `奥体基站-${i + 1}`,
       lng,
       lat,
-      bbuLoad: Math.floor(Math.random() * 40) + 30, // 30-70%
-      aauStatus: Math.random() > 0.1 ? 'normal' : 'warning', // 90%正常
-      hasSmartBoard: i % 8 === 0, // 每8个基站有一个智能板
+      bbuLoad: Math.floor(Math.random() * 40) + 30,
+      aauStatus: Math.random() > 0.1 ? 'normal' : 'warning',
+      hasSmartBoard: i % 8 === 0,
       type: i < 12 ? 'main' : 'micro',
     });
   }
@@ -80,7 +79,6 @@ function generateCrowdData(currentTime) {
   const centerLng = 118.7265;
   const centerLat = 32.0087;
   
-  // 网格化人流热点
   for (let i = 0; i < 30; i++) {
     const angle = Math.random() * Math.PI * 2;
     const radius = 0.001 + Math.random() * 0.008;
@@ -91,7 +89,7 @@ function generateCrowdData(currentTime) {
       lng: centerLng + Math.cos(angle) * radius,
       lat: centerLat + Math.sin(angle) * radius,
       count,
-      isAlert: count > 1500, // 超过1500人触发告警
+      isAlert: count > 1500,
     });
   }
   return crowdPoints;
@@ -105,29 +103,34 @@ if (typeof window !== 'undefined') {
 export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onAlertsChange }) {
   const containerRef = useRef(null);
   const sceneRef = useRef(null);
-  const flowLayerRef = useRef(null);
-  const zoneLayerRef = useRef(null);
-  const stationLayerRef = useRef(null);
-  const landmarkLayerRef = useRef(null);
-  const vehicleLayerRef = useRef(null);
-  const staffLayerRef = useRef(null);
-  const crowdLayerRef = useRef(null);
-  const alertLayerRef = useRef(null);
+  const isInitializingRef = useRef(false);
+  const isDestroyedRef = useRef(false);
+  
+  // 图层引用
+  const layersRef = useRef({
+    flow: null,
+    zone: null,
+    station: null,
+    landmark: null,
+    vehicle: null,
+    staff: null,
+    crowd: null,
+    alert: null,
+  });
   
   const [sceneLoaded, setSceneLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedStation, setSelectedStation] = useState(null);
-  const [alerts, setAlerts] = useState([]);
   
-  // API 数据状态
+  // 数据状态
   const [flowData, setFlowData] = useState(null);
   const [zoneData, setZoneData] = useState(null);
-  const [stationData, setStationData] = useState(() => generateBaseStations());
+  const [stationData] = useState(() => generateBaseStations());
   const [staffData] = useState(() => generateGroundStaff());
   const [crowdData, setCrowdData] = useState(() => generateCrowdData('20:00'));
 
-  // ========== 更新告警列表 ==========
+  // ========== 更新告警 ==========
   const updateAlerts = useCallback((crowdPoints) => {
     const newAlerts = crowdPoints
       .filter(p => p.isAlert)
@@ -141,211 +144,239 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
         lat: p.lat,
       }));
     
-    setAlerts(newAlerts);
-    if (onAlertsChange) {
-      onAlertsChange(newAlerts);
-    }
+    if (onAlertsChange) onAlertsChange(newAlerts);
   }, [onAlertsChange]);
 
-  // ========== 第一步：初始化地图和图层 ==========
+  // ========== 严格的初始化 useEffect ==========
   useEffect(() => {
-    // 【拦截器】防止 React 18 严格模式下的二次实例化
-    if (sceneRef.current) {
-      console.log('[AmapL7Scene] 场景已存在，跳过二次初始化');
+    // 严格拦截器 - 防止任何情况下的重复初始化
+    if (isInitializingRef.current || sceneRef.current) {
+      console.log('[AmapL7Scene] 拦截重复初始化');
       return;
     }
-
+    
+    // 标记正在初始化
+    isInitializingRef.current = true;
+    isDestroyedRef.current = false;
+    
     const container = containerRef.current;
     if (!container) {
       setError('地图容器未找到');
       setLoading(false);
+      isInitializingRef.current = false;
       return;
     }
 
     if (!AMAP_KEY) {
       setError('高德 Key 未配置 (VITE_AMAP_KEY)');
       setLoading(false);
+      isInitializingRef.current = false;
       return;
     }
 
-    try {
-      // 创建场景 - 净化底图配置
-      const scene = new Scene({
-        id: container,
-        map: new GaodeMap({
-          pitch: 55,
-          zoom: 15,
-          center: CENTER_COORDINATES,
-          viewMode: '3D',
-          style: 'amap://styles/darkblue',
-          token: AMAP_KEY,
-          features: ['bg', 'road', 'building'], // 【模块1】隐藏原生POI，只留建筑和道路
-        }),
-        logoVisible: false,
-      });
+    let scene = null;
+    let isEffectActive = true;
 
-      scene.setBgColor('#0B1A2A');
-      sceneRef.current = scene;
+    const initMap = async () => {
+      try {
+        // 创建场景
+        scene = new Scene({
+          id: container,
+          map: new GaodeMap({
+            pitch: 55,
+            zoom: 15,
+            center: CENTER_COORDINATES,
+            viewMode: '3D',
+            style: 'amap://styles/darkblue',
+            token: AMAP_KEY,
+            features: ['bg', 'road', 'building'],
+          }),
+          logoVisible: false,
+        });
 
-      // 等待场景加载
-      scene.on('loaded', async () => {
-        console.log('[AmapL7Scene] 地图加载成功');
+        scene.setBgColor('#0B1A2A');
         
-        try {
-          // 【模块2】注册图标
-          await Promise.all([
-            scene.addImage('base-station', '/icons/base-station.svg'),
-            scene.addImage('comm-vehicle', '/icons/comm-vehicle.svg'),
-            scene.addImage('smart-board', '/icons/smart-board.svg'),
-          ]);
-          console.log('[AmapL7Scene] 图标注册完成');
+        // 保存引用
+        sceneRef.current = scene;
 
-          // 1. 人流动线图层
-          const flowLayer = new LineLayer({ zIndex: 1 })
-            .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
-            .size(2)
-            .shape('line')
-            .color('#00f0ff')
-            .animate({ enable: true, interval: 0.1, trailLength: 0.5, duration: 2 })
-            .style({ opacity: 0.8 });
-          scene.addLayer(flowLayer);
-          flowLayerRef.current = flowLayer;
-
-          // 2. 监控区域图层
-          const zoneLayer = new PolygonLayer({ zIndex: 2 })
-            .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
-            .color('rgba(0, 240, 255, 0.3)')
-            .shape('extrude')
-            .size(50)
-            .style({ opacity: 0.6 });
-          scene.addLayer(zoneLayer);
-          zoneLayerRef.current = zoneLayer;
-
-          // 【模块1】3. 专属地标图层 (文本)
-          const landmarkLayer = new PointLayer({ zIndex: 10 })
-            .source({
-              type: 'FeatureCollection',
-              features: CUSTOM_LANDMARKS.map(lm => ({
-                type: 'Feature',
-                properties: { name: lm.name, type: lm.type },
-                geometry: { type: 'Point', coordinates: [lm.lng, lm.lat] }
-              }))
-            }, { parser: { type: 'geojson' } })
-            .shape('name', 'text')
-            .size(14)
-            .color('#fbbf24') // 金黄色赛博朋克
-            .style({
-              textAnchor: 'center',
-              textOffset: [0, -20],
-              stroke: '#000',
-              strokeWidth: 2,
-            });
-          scene.addLayer(landmarkLayer);
-          landmarkLayerRef.current = landmarkLayer;
-
-          // 【模块2】4. 应急通信车图层
-          const vehicleLayer = new PointLayer({ zIndex: 8 })
-            .source({
-              type: 'FeatureCollection',
-              features: EMERGENCY_VEHICLES.map(v => ({
-                type: 'Feature',
-                properties: { ...v },
-                geometry: { type: 'Point', coordinates: [v.lng, v.lat] }
-              }))
-            }, { parser: { type: 'geojson' } })
-            .shape('comm-vehicle')
-            .size(25);
-          scene.addLayer(vehicleLayer);
-          vehicleLayerRef.current = vehicleLayer;
-
-          // 【模块2】5. 基站集群图层 (使用自定义图标)
-          const stationLayer = new PointLayer({ zIndex: 6 })
-            .source({
-              type: 'FeatureCollection',
-              features: stationData.map(s => ({
-                type: 'Feature',
-                properties: { ...s },
-                geometry: { type: 'Point', coordinates: [s.lng, s.lat] }
-              }))
-            }, { parser: { type: 'geojson' } })
-            .shape(s => s.hasSmartBoard ? 'smart-board' : 'base-station')
-            .size(s => s.hasSmartBoard ? 28 : 22);
-          scene.addLayer(stationLayer);
-          stationLayerRef.current = stationLayer;
-
-          // 【模块3】基站点击事件
-          stationLayer.on('click', (e) => {
-            if (e.feature) {
-              const station = e.feature.properties;
-              setSelectedStation(station);
-              if (onStationClick) onStationClick(station);
+        // 等待场景加载
+        scene.on('loaded', async () => {
+          // 检查组件是否仍然挂载
+          if (!isEffectActive || isDestroyedRef.current) {
+            console.log('[AmapL7Scene] 场景加载完成但组件已卸载，放弃初始化');
+            if (scene) scene.destroy();
+            return;
+          }
+          
+          try {
+            // 注册图标
+            try {
+              await Promise.all([
+                scene.addImage('base-station', '/icons/base-station.svg'),
+                scene.addImage('comm-vehicle', '/icons/comm-vehicle.svg'),
+                scene.addImage('smart-board', '/icons/smart-board.svg'),
+              ]);
+            } catch (imgErr) {
+              console.warn('[AmapL7Scene] 图标注册失败，使用默认样式:', imgErr);
             }
-          });
 
-          // 【模块2】6. 地面保障人员图层 (绿色小圆点)
-          const staffLayer = new PointLayer({ zIndex: 7 })
-            .source({
-              type: 'FeatureCollection',
-              features: staffData.map(s => ({
-                type: 'Feature',
-                properties: { ...s },
-                geometry: { type: 'Point', coordinates: [s.lng, s.lat] }
-              }))
-            }, { parser: { type: 'geojson' } })
-            .shape('circle')
-            .color('#22c55e')
-            .size(8)
-            .style({ opacity: 0.9 });
-          scene.addLayer(staffLayer);
-          staffLayerRef.current = staffLayer;
+            // 1. 人流动线图层
+            const flowLayer = new LineLayer({ zIndex: 1 })
+              .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
+              .size(2)
+              .shape('line')
+              .color('#00f0ff')
+              .animate({ enable: true, interval: 0.1, trailLength: 0.5, duration: 2 })
+              .style({ opacity: 0.8 });
+            scene.addLayer(flowLayer);
+            layersRef.current.flow = flowLayer;
 
-          // 【模块4】7. 人流3D柱状热力图层 (圆柱体)
-          const crowdLayer = new PointLayer({ zIndex: 5 })
-            .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
-            .shape('cylinder')
-            .size('count', [10, 1000]) // 人越多柱子越高
-            .color('count', ['#34d399', '#fbbf24', '#ef4444']) // 绿->黄->红
-            .style({ opacity: 0.7 });
-          scene.addLayer(crowdLayer);
-          crowdLayerRef.current = crowdLayer;
+            // 2. 监控区域图层
+            const zoneLayer = new PolygonLayer({ zIndex: 2 })
+              .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
+              .color('rgba(0, 240, 255, 0.3)')
+              .shape('extrude')
+              .size(50)
+              .style({ opacity: 0.6 });
+            scene.addLayer(zoneLayer);
+            layersRef.current.zone = zoneLayer;
 
-          // 【模块5】8. 告警呼吸灯图层 (红色波纹动画)
-          const alertLayer = new PointLayer({ zIndex: 9 })
-            .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
-            .shape('circle')
-            .color('#ef4444')
-            .size(30)
-            .animate({ enable: true, speed: 0.5, rings: 3 }) // 呼吸灯效果
-            .style({ opacity: 0.8 });
-          scene.addLayer(alertLayer);
-          alertLayerRef.current = alertLayer;
+            // 3. 地标图层
+            const landmarkLayer = new PointLayer({ zIndex: 10 })
+              .source({
+                type: 'FeatureCollection',
+                features: CUSTOM_LANDMARKS.map(lm => ({
+                  type: 'Feature',
+                  properties: { name: lm.name, type: lm.type },
+                  geometry: { type: 'Point', coordinates: [lm.lng, lm.lat] }
+                }))
+              }, { parser: { type: 'geojson' } })
+              .shape('name', 'text')
+              .size(14)
+              .color('#fbbf24')
+              .style({ textAnchor: 'center', textOffset: [0, -20], stroke: '#000', strokeWidth: 2 });
+            scene.addLayer(landmarkLayer);
+            layersRef.current.landmark = landmarkLayer;
 
-          setSceneLoaded(true);
-          setLoading(false);
-          console.log('[AmapL7Scene] 所有图层初始化完成');
-        } catch (layerErr) {
-          console.error('[AmapL7Scene] 图层初始化错误:', layerErr);
-          setError('图层初始化失败: ' + layerErr.message);
+            // 4. 应急通信车图层
+            const vehicleLayer = new PointLayer({ zIndex: 8 })
+              .source({
+                type: 'FeatureCollection',
+                features: EMERGENCY_VEHICLES.map(v => ({
+                  type: 'Feature',
+                  properties: { ...v },
+                  geometry: { type: 'Point', coordinates: [v.lng, v.lat] }
+                }))
+              }, { parser: { type: 'geojson' } })
+              .shape('comm-vehicle')
+              .size(25);
+            scene.addLayer(vehicleLayer);
+            layersRef.current.vehicle = vehicleLayer;
+
+            // 5. 基站图层
+            const stationLayer = new PointLayer({ zIndex: 6 })
+              .source({
+                type: 'FeatureCollection',
+                features: stationData.map(s => ({
+                  type: 'Feature',
+                  properties: { ...s },
+                  geometry: { type: 'Point', coordinates: [s.lng, s.lat] }
+                }))
+              }, { parser: { type: 'geojson' } })
+              .shape(s => s.hasSmartBoard ? 'smart-board' : 'base-station')
+              .size(s => s.hasSmartBoard ? 28 : 22);
+            scene.addLayer(stationLayer);
+            layersRef.current.station = stationLayer;
+
+            // 点击事件
+            stationLayer.on('click', (e) => {
+              if (e.feature) {
+                const station = e.feature.properties;
+                setSelectedStation(station);
+                if (onStationClick) onStationClick(station);
+              }
+            });
+
+            // 6. 保障人员图层
+            const staffLayer = new PointLayer({ zIndex: 7 })
+              .source({
+                type: 'FeatureCollection',
+                features: staffData.map(s => ({
+                  type: 'Feature',
+                  properties: { ...s },
+                  geometry: { type: 'Point', coordinates: [s.lng, s.lat] }
+                }))
+              }, { parser: { type: 'geojson' } })
+              .shape('circle')
+              .color('#22c55e')
+              .size(8)
+              .style({ opacity: 0.9 });
+            scene.addLayer(staffLayer);
+            layersRef.current.staff = staffLayer;
+
+            // 7. 人流热力图层
+            const crowdLayer = new PointLayer({ zIndex: 5 })
+              .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
+              .shape('cylinder')
+              .size('count', [10, 1000])
+              .color('count', ['#34d399', '#fbbf24', '#ef4444'])
+              .style({ opacity: 0.7 });
+            scene.addLayer(crowdLayer);
+            layersRef.current.crowd = crowdLayer;
+
+            // 8. 告警呼吸灯图层
+            const alertLayer = new PointLayer({ zIndex: 9 })
+              .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
+              .shape('circle')
+              .color('#ef4444')
+              .size(30)
+              .animate({ enable: true, speed: 0.5, rings: 3 })
+              .style({ opacity: 0.8 });
+            scene.addLayer(alertLayer);
+            layersRef.current.alert = alertLayer;
+
+            if (isEffectActive && !isDestroyedRef.current) {
+              setSceneLoaded(true);
+              setLoading(false);
+              console.log('[AmapL7Scene] 地图初始化完成');
+            }
+          } catch (layerErr) {
+            console.error('[AmapL7Scene] 图层初始化错误:', layerErr);
+            if (isEffectActive) {
+              setError('图层初始化失败: ' + layerErr.message);
+              setLoading(false);
+            }
+          }
+        });
+
+        scene.on('error', (err) => {
+          console.error('[AmapL7Scene] 场景错误:', err);
+          if (isEffectActive && !isDestroyedRef.current) {
+            setError('地图渲染失败: ' + (err.message || '未知错误'));
+            setLoading(false);
+          }
+        });
+
+      } catch (err) {
+        console.error('[AmapL7Scene] 初始化严重异常:', err);
+        if (isEffectActive) {
+          setError(err.message || '地图初始化失败');
           setLoading(false);
         }
-      });
+      } finally {
+        isInitializingRef.current = false;
+      }
+    };
 
-      scene.on('error', (err) => {
-        console.error('[AmapL7Scene] 场景错误:', err);
-        setError('地图渲染失败: ' + (err.message || '未知错误'));
-        setLoading(false);
-      });
+    initMap();
 
-    } catch (err) {
-      console.error('[AmapL7Scene] 初始化严重异常:', err);
-      setError(err.message || '地图初始化失败');
-      setLoading(false);
-    }
-
-    // 清理函数
+    // 【严格清理】
     return () => {
+      console.log('[AmapL7Scene] 组件卸载，开始清理');
+      isEffectActive = false;
+      isDestroyedRef.current = true;
+      
       if (sceneRef.current) {
-        console.log('[AmapL7Scene] 销毁地图实例');
         try {
           sceneRef.current.destroy();
         } catch (e) {
@@ -353,10 +384,14 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
         }
         sceneRef.current = null;
       }
+      
+      // 重置所有状态
+      layersRef.current = { flow: null, zone: null, station: null, landmark: null, vehicle: null, staff: null, crowd: null, alert: null };
+      isInitializingRef.current = false;
     };
   }, []); // 空依赖数组，只执行一次
 
-  // ========== 第二步：获取 API 数据 ==========
+  // ========== 获取 API 数据 ==========
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -364,7 +399,6 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
           fetchFlowData(currentTime),
           fetchZoneData('defense'),
         ]);
-        
         setFlowData(flow);
         setZoneData(zones);
       } catch (err) {
@@ -375,19 +409,16 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
     loadData();
   }, [currentTime]);
 
-  // ========== 第三步：根据时间更新人流数据和告警 ==========
+  // ========== 更新人流数据和告警 ==========
   useEffect(() => {
-    if (!sceneLoaded || !sceneRef.current) return;
+    if (!sceneLoaded || !sceneRef.current || isDestroyedRef.current) return;
     
-    // 【模块4】生成新的人流数据
     const newCrowdData = generateCrowdData(currentTime);
     setCrowdData(newCrowdData);
-    
-    // 【模块5】更新告警
     updateAlerts(newCrowdData);
     
-    // 更新人流3D柱状图层
-    if (crowdLayerRef.current) {
+    // 更新人流图层
+    if (layersRef.current.crowd) {
       try {
         const geojson = {
           type: 'FeatureCollection',
@@ -397,14 +428,14 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
             geometry: { type: 'Point', coordinates: [p.lng, p.lat] }
           }))
         };
-        crowdLayerRef.current.setData(geojson);
+        layersRef.current.crowd.setData(geojson);
       } catch (err) {
         console.error('[AmapL7Scene] 更新人流数据失败:', err);
       }
     }
     
-    // 【模块5】更新告警呼吸灯图层
-    if (alertLayerRef.current) {
+    // 更新告警图层
+    if (layersRef.current.alert) {
       try {
         const alertPoints = newCrowdData.filter(p => p.isAlert);
         const geojson = {
@@ -415,19 +446,18 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
             geometry: { type: 'Point', coordinates: [p.lng, p.lat] }
           }))
         };
-        alertLayerRef.current.setData(geojson);
+        layersRef.current.alert.setData(geojson);
       } catch (err) {
         console.error('[AmapL7Scene] 更新告警图层失败:', err);
       }
     }
   }, [sceneLoaded, currentTime, updateAlerts]);
 
-  // ========== 第四步：更新其他图层数据 ==========
+  // ========== 更新其他图层 ==========
   useEffect(() => {
-    if (!sceneLoaded || !sceneRef.current) return;
+    if (!sceneLoaded || !sceneRef.current || isDestroyedRef.current) return;
     
-    // 更新人流线数据
-    if (flowLayerRef.current && flowData && flowData.length > 0) {
+    if (layersRef.current.flow && flowData) {
       try {
         const geojson = {
           type: 'FeatureCollection',
@@ -437,14 +467,13 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
             geometry: { type: 'LineString', coordinates: item.path }
           }))
         };
-        flowLayerRef.current.setData(geojson);
+        layersRef.current.flow.setData(geojson);
       } catch (err) {
         console.error('[AmapL7Scene] 更新人流线失败:', err);
       }
     }
     
-    // 更新区域数据
-    if (zoneLayerRef.current && zoneData) {
+    if (layersRef.current.zone && zoneData) {
       try {
         const zones = zoneData.defenseZones || zoneData;
         const geojson = {
@@ -455,7 +484,7 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
             geometry: { type: 'Polygon', coordinates: [zone.coordinates] }
           }))
         };
-        zoneLayerRef.current.setData(geojson);
+        layersRef.current.zone.setData(geojson);
       } catch (err) {
         console.error('[AmapL7Scene] 更新区域数据失败:', err);
       }
@@ -464,23 +493,18 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-[#0B1A2A]">
-      {/* 核心：地图容器 */}
       <div ref={containerRef} className="absolute inset-0 w-full h-full" />
       
-      {/* 加载遮罩 */}
       {(loading || !sceneLoaded) && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#0B1A2A]/90 backdrop-blur-sm">
           <div className="text-center">
             <Loader2 className="w-10 h-10 text-cyan-400 animate-spin mx-auto mb-3" />
             <div className="text-cyan-400 text-lg">初始化 3D 地图...</div>
-            {!AMAP_KEY && (
-              <div className="text-yellow-400 text-sm mt-2">缺少高德地图 Key 配置</div>
-            )}
+            {!AMAP_KEY && <div className="text-yellow-400 text-sm mt-2">缺少高德地图 Key 配置</div>}
           </div>
         </div>
       )}
       
-      {/* 错误遮罩 */}
       {error && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#0B1A2A]/90 backdrop-blur-sm">
           <div className="text-center text-yellow-400 max-w-md px-4">
@@ -490,19 +514,16 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
         </div>
       )}
       
-      {/* 【模块3】基站详情悬浮面板 */}
       {sceneLoaded && selectedStation && (
         <div className="absolute top-20 right-4 z-20 w-72">
           <div className="glass-panel rounded-xl p-4 border border-cyan-400/30 relative">
-            {/* 关闭按钮 */}
             <button 
               onClick={() => setSelectedStation(null)}
-              className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+              className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center"
             >
               <X className="w-4 h-4 text-white/60" />
             </button>
             
-            {/* 标题 */}
             <div className="flex items-center gap-2 mb-3 pr-6">
               <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
                 <MapPin className="w-4 h-4 text-cyan-400" />
@@ -513,7 +534,6 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
               </div>
             </div>
             
-            {/* 状态信息 */}
             <div className="space-y-2">
               <div className="flex items-center justify-between p-2 rounded-lg bg-white/5">
                 <div className="flex items-center gap-2">
@@ -545,23 +565,10 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
                 </span>
               </div>
             </div>
-            
-            {/* 坐标信息 */}
-            <div className="mt-3 pt-3 border-t border-white/10">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-white/40">经度</span>
-                <span className="text-white/60 font-mono">{selectedStation.lng?.toFixed(4)}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs mt-1">
-                <span className="text-white/40">纬度</span>
-                <span className="text-white/60 font-mono">{selectedStation.lat?.toFixed(4)}</span>
-              </div>
-            </div>
           </div>
         </div>
       )}
       
-      {/* 图例面板 */}
       {sceneLoaded && (
         <>
           <div className="absolute top-4 left-4 bg-cyber-panel/90 rounded-lg px-4 py-2 border border-cyan-400/30 z-10">
@@ -573,15 +580,15 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
             <div className="text-cyan-400 text-xs font-bold mb-2">图例</div>
             <div className="space-y-1.5 text-[10px] text-white/70">
               <div className="flex items-center gap-2">
-                <img src="/icons/base-station.svg" className="w-4 h-4" alt="基站" />
+                <img src="/icons/base-station.svg" className="w-4 h-4" alt="" />
                 <span>5G 基站</span>
               </div>
               <div className="flex items-center gap-2">
-                <img src="/icons/smart-board.svg" className="w-4 h-4" alt="智能板" />
+                <img src="/icons/smart-board.svg" className="w-4 h-4" alt="" />
                 <span>智能板基站</span>
               </div>
               <div className="flex items-center gap-2">
-                <img src="/icons/comm-vehicle.svg" className="w-4 h-4" alt="应急车" />
+                <img src="/icons/comm-vehicle.svg" className="w-4 h-4" alt="" />
                 <span>应急通信车</span>
               </div>
               <div className="flex items-center gap-2">
