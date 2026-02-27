@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2, MapPin, X, Activity, Zap, Cpu, Users, Radio } from 'lucide-react';
-import { Scene, GaodeMap, PointLayer, LineLayer, PolygonLayer } from '@antv/l7';
+import { Scene, GaodeMap, PointLayer, HeatmapLayer, PolygonLayer } from '@antv/l7';
 import { fetchFlowData, fetchZoneData } from '../../api/dashboard.js';
 
 const AMAP_KEY = import.meta.env.VITE_AMAP_KEY || '';
@@ -64,41 +64,41 @@ function generateGroundStaff() {
   return staff;
 }
 
-// ========== 生成 OD 飞线数据 (人流从地铁站向奥体汇聚) ==========
-function generateODFlowData(currentTime) {
+// ========== 生成热力图离散点数据 (3D 热力场) ==========
+function generateCrowdHeatData(currentTime) {
   const hour = parseInt(currentTime?.split(':')[0] || '20');
   const isPeak = hour >= 19 && hour <= 21;
-  const baseMultiplier = isPeak ? 2.5 : 1;
+  const baseMultiplier = isPeak ? 1.5 : 1;
   
-  const flows = [];
-  const destinations = [
-    { lng: 118.7265, lat: 32.0087, name: '奥体中心' },
-    { lng: 118.7400, lat: 32.0120, name: '华彩中心' },
-  ];
-  const sources = [
-    { lng: 118.7350, lat: 32.0050, name: '奥体东地铁站' },
-    { lng: 118.7200, lat: 32.0150, name: '元通地铁站' },
-    { lng: 118.7150, lat: 32.0020, name: '滨江入口' },
+  // 在奥体中心及周边生成 400 个离散热力点
+  const points = [];
+  const hotspots = [
+    { lng: 118.7265, lat: 32.0087, intensity: 1.0 }, // 奥体中心
+    { lng: 118.7400, lat: 32.0120, intensity: 0.7 }, // 华彩中心
+    { lng: 118.7350, lat: 32.0050, intensity: 0.8 }, // 奥体东地铁站
+    { lng: 118.7200, lat: 32.0150, intensity: 0.6 }, // 元通地铁站
   ];
   
-  let id = 0;
-  sources.forEach(src => {
-    destinations.forEach(dst => {
-      const count = Math.floor((Math.random() * 300 + 100) * baseMultiplier);
-      flows.push({
-        id: `FLOW-${id++}`,
-        fromLng: src.lng,
-        fromLat: src.lat,
-        toLng: dst.lng,
-        toLat: dst.lat,
-        count,
-        source: src.name,
-        target: dst.name,
-      });
-    });
+  // 为每个热点生成密集点群
+  hotspots.forEach(hotspot => {
+    const pointCount = Math.floor(100 * hotspot.intensity);
+    for (let i = 0; i < pointCount; i++) {
+      const lng = hotspot.lng + (Math.random() - 0.5) * 0.008;
+      const lat = hotspot.lat + (Math.random() - 0.5) * 0.008;
+      const count = Math.floor((Math.random() * 80 + 20) * hotspot.intensity * baseMultiplier);
+      points.push({ lng, lat, count });
+    }
   });
   
-  return flows;
+  // 补充随机分布的背景人流点
+  for (let i = 0; i < 100; i++) {
+    const lng = 118.728 + (Math.random() - 0.5) * 0.02;
+    const lat = 32.005 + (Math.random() - 0.5) * 0.02;
+    const count = Math.floor(Math.random() * 40 * baseMultiplier);
+    points.push({ lng, lat, count });
+  }
+  
+  return points;
 }
 
 // ========== 全局高德安全配置 ==========
@@ -238,13 +238,13 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
   const isDestroyedRef = useRef(false);
   
   const layersRef = useRef({
-    odFlow: null,
+    heatmap: null,      // 3D 热力图层
     zone: null,
-    station: null,
+    station: null,      // 基站图层 (zIndex 最高)
     landmark: null,
     vehicle: null,
     staff: null,
-    alert: null,
+    alert: null,        // 告警呼吸灯 (zIndex 最高)
   });
   
   const [sceneLoaded, setSceneLoaded] = useState(false);
@@ -252,25 +252,27 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
   const [error, setError] = useState(null);
   const [selectedStation, setSelectedStation] = useState(null);
   
-  const [flowData, setFlowData] = useState(null);
   const [zoneData, setZoneData] = useState(null);
   const [stationData] = useState(() => generateBaseStations());
   const [staffData] = useState(() => generateGroundStaff());
-  const [odFlowData, setODFlowData] = useState(() => generateODFlowData('20:00'));
+  const [crowdHeatData, setCrowdHeatData] = useState(() => generateCrowdHeatData('20:00'));
 
-  const updateAlerts = useCallback((flows) => {
-    const highFlowAlerts = flows
-      .filter(f => f.count > 500)
-      .slice(0, 3)
-      .map((f, idx) => ({
-        id: `FLOW-ALERT-${idx}`,
-        level: f.count > 600 ? 'high' : 'medium',
-        title: `${f.source} → ${f.target} 人流高峰`,
-        time: '刚刚',
-        area: f.source,
-      }));
+  // 基于热力图数据生成告警
+  const updateAlerts = useCallback((heatPoints) => {
+    // 找出高密度区域 (count > 70) 作为告警点
+    const highDensityPoints = heatPoints
+      .filter(p => p.count > 70)
+      .slice(0, 4);
     
-    if (onAlertsChange) onAlertsChange(highFlowAlerts);
+    const alerts = highDensityPoints.map((p, idx) => ({
+      id: `HEAT-ALERT-${idx}`,
+      level: p.count > 85 ? 'high' : 'medium',
+      title: `人流密集区域: ${p.count}人`,
+      time: '刚刚',
+      area: `奥体周边热力点-${idx + 1}`,
+    }));
+    
+    if (onAlertsChange) onAlertsChange(alerts);
   }, [onAlertsChange]);
 
   useEffect(() => {
@@ -330,24 +332,30 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
               scene.addImage('smart-board', '/icons/smart-board.svg'),
             ]).catch(() => console.warn('[AmapL7Scene] 部分图标加载失败'));
 
-            // 1. OD 飞线图层 (替代圆柱体)
-            const odFlowLayer = new LineLayer({ blend: 'normal', zIndex: 5 })
-              .source([], {
-                parser: {
-                  type: 'json',
-                  x: 'fromLng',
-                  y: 'fromLat',
-                  x1: 'toLng',
-                  y1: 'toLat',
-                }
+            // 1. 3D 热力图层 (Cyberpunk 风格能量场)
+            const heatmapLayer = new HeatmapLayer({ zIndex: 1 })
+              .source(crowdHeatData, {
+                parser: { type: 'json', x: 'lng', y: 'lat' },
               })
-              .size('count', [1, 4]) // 人流多线就粗
-              .shape('arc3d') // 3D 弧线
-              .color('count', (c) => c > 500 ? '#ef4444' : '#22d3ee') // 人流大的红色，小的青色
-              .animate({ enable: true, duration: 2, trailLength: 0.5 }) // 流光动画
-              .style({ opacity: 0.8 });
-            scene.addLayer(odFlowLayer);
-            layersRef.current.odFlow = odFlowLayer;
+              .shape('heatmap3D') // 使用 3D 热力起伏效果
+              .size('count', [0, 1]) // 权重映射
+              .style({
+                intensity: 3, // 热力强度
+                radius: 25,   // 热力点扩散半径
+                opacity: 0.8,
+                rampColors: {
+                  colors: [
+                    'rgba(11, 26, 42, 0)', // 0% 透明深蓝底色
+                    '#0891b2',             // 20% 赛博青
+                    '#10b981',             // 40% 翠绿
+                    '#fbbf24',             // 70% 警告黄
+                    '#ef4444'              // 100% 拥塞红
+                  ],
+                  positions: [0, 0.2, 0.4, 0.7, 1.0]
+                }
+              });
+            scene.addLayer(heatmapLayer);
+            layersRef.current.heatmap = heatmapLayer;
 
             // 2. 监控区域图层
             const zoneLayer = new PolygonLayer({ zIndex: 2 })
@@ -433,14 +441,14 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
             scene.addLayer(staffLayer);
             layersRef.current.staff = staffLayer;
 
-            // 7. 告警呼吸灯图层 - 固定合理尺寸
-            const alertLayer = new PointLayer({ zIndex: 9 })
+            // 7. 告警呼吸灯图层 - zIndex 最高确保在最上层
+            const alertLayer = new PointLayer({ zIndex: 12 })
               .source(EMPTY_GEOJSON, { parser: { type: 'geojson' } })
               .shape('circle')
               .color('#ef4444')
-              .size(20)
+              .size(25)
               .animate({ enable: true, speed: 1, rings: 3 })
-              .style({ opacity: 0.7 });
+              .style({ opacity: 0.9 });
             scene.addLayer(alertLayer);
             layersRef.current.alert = alertLayer;
 
@@ -488,7 +496,7 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
         } catch (e) {}
         sceneRef.current = null;
       }
-      layersRef.current = { odFlow: null, zone: null, station: null, landmark: null, vehicle: null, staff: null, alert: null };
+      layersRef.current = { heatmap: null, zone: null, station: null, landmark: null, vehicle: null, staff: null, alert: null };
       isInitializingRef.current = false;
     };
   }, []);
@@ -497,11 +505,7 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [flow, zones] = await Promise.all([
-          fetchFlowData(currentTime),
-          fetchZoneData('defense'),
-        ]);
-        setFlowData(flow);
+        const zones = await fetchZoneData('defense');
         setZoneData(zones);
       } catch (err) {
         console.error('[AmapL7Scene] 获取数据失败:', err);
@@ -510,32 +514,34 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
     loadData();
   }, [currentTime]);
 
-  // 更新 OD 飞线数据
+  // 更新热力图数据
   useEffect(() => {
     if (!sceneLoaded || !sceneRef.current || isDestroyedRef.current) return;
     
-    const newODFlowData = generateODFlowData(currentTime);
-    setODFlowData(newODFlowData);
-    updateAlerts(newODFlowData);
+    const newHeatData = generateCrowdHeatData(currentTime);
+    setCrowdHeatData(newHeatData);
+    updateAlerts(newHeatData);
     
-    if (layersRef.current.odFlow) {
+    // 更新热力图层
+    if (layersRef.current.heatmap) {
       try {
-        layersRef.current.odFlow.setData(newODFlowData);
+        layersRef.current.heatmap.setData(newHeatData);
       } catch (err) {
-        console.error('[AmapL7Scene] 更新OD飞线失败:', err);
+        console.error('[AmapL7Scene] 更新热力图失败:', err);
       }
     }
     
-    // 高流量告警点
+    // 高密区域告警点 (count > 75)
     if (layersRef.current.alert) {
       try {
-        const highFlowPoints = newODFlowData
-          .filter(f => f.count > 600)
-          .map(f => ({ lng: f.toLng, lat: f.toLat }));
+        const highDensityPoints = newHeatData
+          .filter(p => p.count > 75)
+          .slice(0, 5)
+          .map(p => ({ lng: p.lng, lat: p.lat }));
         
         const geojson = {
           type: 'FeatureCollection',
-          features: highFlowPoints.map((p, idx) => ({
+          features: highDensityPoints.map((p, idx) => ({
             type: 'Feature',
             properties: { id: `ALERT-${idx}` },
             geometry: { type: 'Point', coordinates: [p.lng, p.lat] }
@@ -602,8 +608,8 @@ export default function AmapL7Scene({ onStationClick, currentTime = '20:00', onA
           <div className="text-cyan-400 text-xs font-bold mb-2">图例</div>
           <div className="space-y-1.5 text-[10px] text-white/70">
             <div className="flex items-center gap-2">
-              <span className="w-6 h-0.5 bg-gradient-to-r from-cyan-400 to-red-400 rounded" />
-              <span>OD 人流飞线</span>
+              <span className="w-6 h-3 rounded bg-gradient-to-t from-cyan-500/60 via-green-500/60 to-red-500/60" />
+              <span>3D 热力密度</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-4 h-4 rounded-full bg-yellow-400 border-2 border-yellow-500/50" />
